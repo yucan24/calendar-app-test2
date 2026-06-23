@@ -148,7 +148,19 @@ function getNextMonth(year: number, month: number) {
   return { year, month: month + 1 };
 }
 
-function twoLines(value: string | null | undefined) {
+function visualLength(value: string | null | undefined) {
+  const text = String(value ?? "").replace(/\s+/g, "");
+
+  let count = 0;
+
+  for (const char of Array.from(text)) {
+    count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
+  }
+
+  return count;
+}
+
+function displayText(value: string | null | undefined) {
   return String(value ?? "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -159,7 +171,26 @@ function twoLines(value: string | null | undefined) {
     .join("\n");
 }
 
-function compactStyle(color: string | null | undefined) {
+function compactStyle(
+  value: string | null | undefined,
+  color: string | null | undefined
+) {
+  const text = displayText(value);
+  const length = visualLength(text);
+  const hasLineBreak = text.includes("\n");
+
+  if (!hasLineBreak && length <= 5) {
+    return {
+      color: color || "#111827",
+      whiteSpace: "nowrap" as const,
+      overflow: "hidden",
+      textOverflow: "clip",
+      lineHeight: "1.08",
+      letterSpacing:
+        length >= 5 ? "-0.1em" : length >= 4 ? "-0.06em" : "-0.03em",
+    };
+  }
+
   return {
     color: color || "#111827",
     whiteSpace: "pre-line" as const,
@@ -168,21 +199,30 @@ function compactStyle(color: string | null | undefined) {
     WebkitLineClamp: 2,
     WebkitBoxOrient: "vertical" as const,
     lineHeight: "1.12",
+    letterSpacing: length >= 10 ? "-0.08em" : "-0.04em",
   };
 }
 
 function compactFontClass(value: string | null | undefined) {
-  const text = String(value ?? "").replace(/\s+/g, "");
+  const length = visualLength(value);
 
-  if (text.length >= 18) {
-    return "text-[8px]";
+  if (length <= 3) {
+    return "text-[12px]";
   }
 
-  if (text.length >= 12) {
+  if (length <= 4) {
+    return "text-[11px]";
+  }
+
+  if (length <= 5) {
+    return "text-[10px]";
+  }
+
+  if (length <= 7) {
     return "text-[9px]";
   }
 
-  return "text-[10px]";
+  return "text-[8px]";
 }
 
 function statusCalendarLabel(status: string | null | undefined) {
@@ -479,15 +519,18 @@ export default function UserCalendarClient({
                             clickEvent.stopPropagation();
                             openEventModal(cell.dateKey, event.id);
                           }}
-                          className="block w-full rounded bg-white px-0.5 py-1 text-center leading-tight shadow-sm"
+                          className="block w-full rounded bg-white px-[1px] py-1 text-center leading-tight shadow-sm"
                         >
                           <span
                             className={`block font-bold ${compactFontClass(
                               event.title
                             )}`}
-                            style={compactStyle(event.title_color)}
+                            style={compactStyle(
+                              event.title,
+                              event.title_color
+                            )}
                           >
-                            {twoLines(event.title)}
+                            {displayText(event.title)}
                           </span>
 
                           {event.location && (
@@ -495,9 +538,12 @@ export default function UserCalendarClient({
                               className={`mt-0.5 block ${compactFontClass(
                                 event.location
                               )}`}
-                              style={compactStyle(event.location_color)}
+                              style={compactStyle(
+                                event.location,
+                                event.location_color
+                              )}
                             >
-                              {twoLines(event.location)}
+                              {displayText(event.location)}
                             </span>
                           )}
 
@@ -506,9 +552,12 @@ export default function UserCalendarClient({
                               className={`mt-0.5 block ${compactFontClass(
                                 event.time_text
                               )}`}
-                              style={compactStyle(event.time_color)}
+                              style={compactStyle(
+                                event.time_text,
+                                event.time_color
+                              )}
                             >
-                              {twoLines(event.time_text)}
+                              {displayText(event.time_text)}
                             </span>
                           )}
 
@@ -563,10 +612,13 @@ export default function UserCalendarClient({
                             clickEvent.stopPropagation();
                             openEventModal(cell.dateKey, event.id);
                           }}
-                          className="block w-full rounded bg-teal-500 px-1 py-1 text-center text-[9px] font-bold leading-tight text-white"
+                          className="block w-full rounded bg-teal-500 px-[1px] py-1 text-center font-bold leading-tight text-white"
                         >
-                          <span style={compactStyle("#ffffff")}>
-                            {twoLines(event.title)}
+                          <span
+                            className={`block ${compactFontClass(event.title)}`}
+                            style={compactStyle(event.title, "#ffffff")}
+                          >
+                            {displayText(event.title)}
                           </span>
                         </button>
                       ))}
