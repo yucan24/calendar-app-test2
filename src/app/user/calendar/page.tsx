@@ -56,13 +56,6 @@ function toDateKey(value: Date) {
   return `${year}-${month}-${date}`;
 }
 
-function toDateKeyFromParts(year: number, month: number, date = 1) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(
-    2,
-    "0"
-  )}`;
-}
-
 function getMonthDaysMondayStart(year: number, month: number) {
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
@@ -114,18 +107,28 @@ function getNextMonth(year: number, month: number) {
   return { year, month: month + 1 };
 }
 
-function statusClass(status: string | null | undefined) {
-  if (status === "attend") return "bg-green-100 text-green-800";
-  if (status === "absent") return "bg-red-100 text-red-800";
-  if (status === "pending") return "bg-yellow-100 text-yellow-800";
-  return "bg-gray-100 text-gray-600";
+function statusLongLabel(status: string | null | undefined) {
+  if (status === "attend") return "〇 出席";
+  if (status === "pending") return "△ 未定";
+  if (status === "absent") return "× 欠席";
+  return "未回答";
 }
 
-function statusShortLabel(status: string | null | undefined) {
-  if (status === "attend") return "〇";
-  if (status === "absent") return "×";
-  if (status === "pending") return "△";
-  return "未";
+function statusPillClass(status: string | null | undefined) {
+  if (status === "attend") return "bg-green-500 text-white";
+  if (status === "pending") return "bg-yellow-500 text-white";
+  if (status === "absent") return "bg-red-500 text-white";
+  return "bg-orange-500 text-white";
+}
+
+function compactTextStyle(color: string | null | undefined) {
+  return {
+    color: color || "#111827",
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical" as const,
+  };
 }
 
 export default async function UserCalendarPage({ searchParams }: PageProps) {
@@ -166,7 +169,7 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
 
   if (eventsError) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="min-h-screen bg-gray-50 p-3 text-gray-900 sm:p-8">
         <div className="mx-auto max-w-6xl">
           <h1 className="text-2xl font-bold">予定</h1>
           <p className="mt-6 rounded bg-red-100 p-4 text-red-700">
@@ -241,12 +244,12 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
   );
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="min-h-screen bg-gray-50 p-3 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">予定・出欠</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-2xl font-bold text-gray-900">予定・出欠</h1>
+            <p className="mt-2 text-sm text-gray-700">
               {currentUser.name} さんの予定と出欠回答
             </p>
           </div>
@@ -262,9 +265,9 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        <section className="mt-8 rounded-lg bg-white p-4 shadow">
+        <section className="mt-6 rounded-lg bg-white p-2 shadow sm:mt-8 sm:p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-bold">
+            <h2 className="text-xl font-bold text-gray-900">
               {currentYear}年{currentMonth}月
             </h2>
 
@@ -294,16 +297,16 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-7 border-l border-t text-center text-sm font-bold">
+          <div className="mt-4 grid grid-cols-7 border-l border-t text-center text-xs font-bold sm:text-sm">
             {WEEKDAYS.map((day) => (
               <div
                 key={day.label}
                 className={
                   day.value === 6
-                    ? "border-b border-r bg-blue-100 p-2"
+                    ? "border-b border-r bg-blue-100 p-1 text-blue-900 sm:p-2"
                     : day.value === 0
-                      ? "border-b border-r bg-red-100 p-2"
-                      : "border-b border-r bg-gray-100 p-2"
+                      ? "border-b border-r bg-red-100 p-1 text-red-900 sm:p-2"
+                      : "border-b border-r bg-gray-100 p-1 text-gray-900 sm:p-2"
                 }
               >
                 {day.label}
@@ -317,7 +320,7 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
                 return (
                   <div
                     key={`empty-${index}`}
-                    className="min-h-36 border-b border-r bg-gray-50 p-2"
+                    className="min-h-[118px] border-b border-r bg-gray-50 p-1 sm:min-h-36 sm:p-2"
                   />
                 );
               }
@@ -339,28 +342,31 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
                 (event) => event.is_holiday
               );
 
+              const baseCellClass =
+                "min-h-[118px] border-b border-r p-1 sm:min-h-36 sm:p-2";
+
               const cellClass =
                 hasHolidayEvent || dayOfWeek === 0
-                  ? "min-h-36 border-b border-r bg-red-50 p-2"
+                  ? `${baseCellClass} bg-red-50`
                   : dayOfWeek === 6
-                    ? "min-h-36 border-b border-r bg-blue-50 p-2"
-                    : "min-h-36 border-b border-r bg-white p-2";
+                    ? `${baseCellClass} bg-blue-50`
+                    : `${baseCellClass} bg-white`;
 
               return (
                 <div key={dateKey} className={cellClass}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between">
                     <p
                       className={
                         isToday
-                          ? "flex h-7 w-7 items-center justify-center rounded-full bg-black text-white"
-                          : "flex h-7 w-7 items-center justify-center rounded-full"
+                          ? "flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-bold text-white sm:h-7 sm:w-7 sm:text-sm"
+                          : "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-gray-900 sm:h-7 sm:w-7 sm:text-sm"
                       }
                     >
                       {date.getDate()}
                     </p>
                   </div>
 
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-1 space-y-1 sm:mt-2">
                     {normalEvents.map((event) => {
                       const response = responsesByEvent.get(event.id);
                       const summary = summariesByEvent.get(event.id);
@@ -368,60 +374,69 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
                       return (
                         <div
                           key={event.id}
-                          className="rounded border bg-white px-2 py-2 text-left text-xs"
+                          className="rounded border bg-white p-1 text-left text-[10px] leading-tight shadow-sm sm:px-2 sm:py-2 sm:text-xs"
                         >
                           <a
                             href={`/user/calendar/${event.id}`}
-                            className="block hover:bg-gray-50"
+                            className="block"
                           >
                             <p
-                              className="truncate font-bold"
-                              style={{
-                                color: event.title_color || "#000000",
-                              }}
+                              className="font-bold"
+                              style={compactTextStyle(event.title_color)}
                             >
                               {event.title}
                             </p>
 
-                            {event.location && (
-                              <p
-                                className="truncate"
-                                style={{
-                                  color: event.location_color || "#000000",
-                                }}
-                              >
-                                {event.location}
-                              </p>
-                            )}
-
                             {event.time_text && (
                               <p
-                                className="truncate"
+                                className="mt-0.5 truncate font-medium"
                                 style={{
-                                  color: event.time_color || "#000000",
+                                  color: event.time_color || "#111827",
                                 }}
                               >
                                 {event.time_text}
                               </p>
                             )}
+
+                            {event.location && (
+                              <p
+                                className="mt-0.5 hidden truncate sm:block"
+                                style={{
+                                  color: event.location_color || "#111827",
+                                }}
+                              >
+                                {event.location}
+                              </p>
+                            )}
                           </a>
 
                           {event.attendance_required ? (
-                            <div className="mt-2">
-                              <AttendanceSelect
-                                eventId={event.id}
-                                userId={currentUser.id}
-                                defaultStatus={response?.status ?? ""}
-                              />
-                            </div>
+                            <>
+                              <div className="mt-2 hidden sm:block">
+                                <AttendanceSelect
+                                  eventId={event.id}
+                                  userId={currentUser.id}
+                                  defaultStatus={response?.status ?? ""}
+                                />
+                              </div>
+
+                              <a
+                                href={`/user/calendar/${event.id}`}
+                                className={`mt-1 block rounded px-1 py-1 text-center text-[10px] font-bold sm:hidden ${statusPillClass(
+                                  response?.status
+                                )}`}
+                              >
+                                {statusLongLabel(response?.status)}
+                              </a>
+                            </>
                           ) : (
-                            <p className="mt-2 rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-600">
-                              出欠回答不要
+                            <p className="mt-1 rounded bg-gray-100 px-1 py-1 text-center text-[10px] font-medium text-gray-700">
+                              出欠不要
                             </p>
                           )}
 
                           {event.attendance_required && summary && (
-                            <p className="mt-1 text-[11px] text-gray-600">
+                            <p className="mt-1 whitespace-nowrap text-center text-[10px] font-medium text-gray-800 sm:text-left sm:text-[11px]">
                               〇{summary.attend} △{summary.pending} ×
                               {summary.absent}
                             </p>
@@ -429,7 +444,7 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
 
                           <a
                             href={`/user/calendar/${event.id}`}
-                            className="mt-1 inline-block text-[11px] text-gray-500 underline"
+                            className="mt-1 hidden text-[11px] text-gray-700 underline sm:inline-block"
                           >
                             詳細を見る
                           </a>
@@ -439,15 +454,24 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
                   </div>
 
                   {periodEvents.length > 0 && (
-                    <div className="mt-2 space-y-1 border-t pt-1">
+                    <div className="mt-1 space-y-1 border-t pt-1 sm:mt-2">
                       {periodEvents.map((event) => (
                         <a
                           key={event.id}
                           href={`/user/calendar/${event.id}`}
-                          className="block truncate rounded bg-teal-100 px-2 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-200"
+                          className="block rounded bg-teal-500 px-1 py-1 text-center text-[10px] font-bold leading-tight text-white sm:px-2 sm:text-[11px]"
                           title={event.title}
                         >
-                          {event.title}
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                            }}
+                          >
+                            {event.title}
+                          </span>
                         </a>
                       ))}
                     </div>
@@ -471,13 +495,17 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
             <span className="rounded bg-red-100 px-3 py-1 text-red-800">
               × 欠席
             </span>
-            <span className="rounded bg-gray-100 px-3 py-1 text-gray-600">
+            <span className="rounded bg-orange-100 px-3 py-1 text-orange-800">
               未 未回答
             </span>
             <span className="rounded bg-teal-100 px-3 py-1 text-teal-800">
               期間予定・出欠不要
             </span>
           </div>
+
+          <p className="mt-3 text-sm text-gray-700">
+            スマホでは予定内の「未回答 / 〇 出席 / △ 未定 / × 欠席」を押すと、詳細画面で回答できます。
+          </p>
         </section>
       </div>
     </main>
