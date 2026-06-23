@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { requireUser } from "@/lib/auth";
-import AttendanceSelect from "./AttendanceSelect";
+import UserCalendarClient from "./UserCalendarClient";
 
 type CalendarEvent = {
   id: string;
@@ -25,10 +25,23 @@ type EventResponse = {
   note: string | null;
 };
 
+type ProfileRole = {
+  id: string;
+  role: "admin" | "user";
+};
+
+type AllResponse = {
+  event_id: string;
+  user_id: string;
+  status: string;
+};
+
 type EventSummary = {
   attend: number;
   pending: number;
   absent: number;
+  coachAttend: number;
+  playerAttend: number;
 };
 
 type PageProps = {
@@ -38,96 +51,45 @@ type PageProps = {
   }>;
 };
 
-const WEEKDAYS = [
-  { label: "月", value: 1 },
-  { label: "火", value: 2 },
-  { label: "水", value: 3 },
-  { label: "木", value: 4 },
-  { label: "金", value: 5 },
-  { label: "土", value: 6 },
-  { label: "日", value: 0 },
-];
+function toTokyoDateKey(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
 
-function toDateKey(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const date = String(value.getDate()).padStart(2, "0");
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
 
-  return `${year}-${month}-${date}`;
+  return `${year}-${month}-${day}`;
 }
 
-function getMonthDaysMondayStart(year: number, month: number) {
-  const firstDay = new Date(year, month - 1, 1);
-  const lastDay = new Date(year, month, 0);
-
-  const firstWeekday = firstDay.getDay();
-  const offset = (firstWeekday + 6) % 7;
-  const lastDate = lastDay.getDate();
-
-  const cells: Array<Date | null> = [];
-
-  for (let i = 0; i < offset; i++) {
-    cells.push(null);
-  }
-
-  for (let date = 1; date <= lastDate; date++) {
-    cells.push(new Date(year, month - 1, date));
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
-
-  return cells;
+function toDateKeyFromParts(year: number, month: number, date = 1) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(
+    2,
+    "0"
+  )}`;
 }
 
-function getMonthRange(year: number, month: number) {
-  const start = new Date(year, month - 1, 1, 0, 0, 0);
-  const end = new Date(year, month, 1, 0, 0, 0);
+function toUtcISOStringFromDateKey(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
+}
+
+function getMonthRangeTokyo(year: number, month: number) {
+  const startKey = toDateKeyFromParts(year, month, 1);
+
+  const next =
+    month === 12
+      ? { year: year + 1, month: 1 }
+      : { year, month: month + 1 };
+
+  const endKey = toDateKeyFromParts(next.year, next.month, 1);
 
   return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-  };
-}
-
-function getPrevMonth(year: number, month: number) {
-  if (month === 1) {
-    return { year: year - 1, month: 12 };
-  }
-
-  return { year, month: month - 1 };
-}
-
-function getNextMonth(year: number, month: number) {
-  if (month === 12) {
-    return { year: year + 1, month: 1 };
-  }
-
-  return { year, month: month + 1 };
-}
-
-function statusLongLabel(status: string | null | undefined) {
-  if (status === "attend") return "〇 出席";
-  if (status === "pending") return "△ 未定";
-  if (status === "absent") return "× 欠席";
-  return "未回答";
-}
-
-function statusPillClass(status: string | null | undefined) {
-  if (status === "attend") return "bg-green-500 text-white";
-  if (status === "pending") return "bg-yellow-500 text-white";
-  if (status === "absent") return "bg-red-500 text-white";
-  return "bg-orange-500 text-white";
-}
-
-function compactTextStyle(color: string | null | undefined) {
-  return {
-    color: color || "#111827",
-    overflow: "hidden",
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical" as const,
+    start: toUtcISOStringFromDateKey(startKey),
+    end: toUtcISOStringFromDateKey(endKey),
   };
 }
 
@@ -136,26 +98,20 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
 
   const currentUser = await requireUser();
 
-  const today = new Date();
-  const todayKey = toDateKey(today);
+  const todayKey = toTokyoDateKey(new Date());
+  const [todayYear, todayMonth] = todayKey.split("-").map(Number);
 
   const yearParam = Number(resolvedSearchParams?.year);
   const monthParam = Number(resolvedSearchParams?.month);
 
-  const currentYear = Number.isFinite(yearParam)
-    ? yearParam
-    : today.getFullYear();
+  const currentYear = Number.isFinite(yearParam) ? yearParam : todayYear;
 
   const currentMonth =
     Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12
       ? monthParam
-      : today.getMonth() + 1;
+      : todayMonth;
 
-  const prev = getPrevMonth(currentYear, currentMonth);
-  const next = getNextMonth(currentYear, currentMonth);
-
-  const monthDays = getMonthDaysMondayStart(currentYear, currentMonth);
-  const monthRange = getMonthRange(currentYear, currentMonth);
+  const monthRange = getMonthRangeTokyo(currentYear, currentMonth);
 
   const { data: events, error: eventsError } = await supabase
     .from("calendar_events")
@@ -196,318 +152,75 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
     eventIds.length > 0
       ? await supabase
           .from("event_responses")
-          .select("event_id, status")
+          .select("event_id, user_id, status")
           .in("event_id", eventIds)
       : { data: [] };
 
-  const myResponseList = (myResponses ?? []) as EventResponse[];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("group_id", currentUser.group_id);
 
-  const responsesByEvent = new Map<string, EventResponse>();
+  const profileRoles = (profiles ?? []) as ProfileRole[];
+  const roleByUser = new Map<string, "admin" | "user">();
 
-  for (const response of myResponseList) {
-    responsesByEvent.set(response.event_id, response);
+  for (const profile of profileRoles) {
+    roleByUser.set(profile.id, profile.role);
   }
 
-  const summariesByEvent = new Map<string, EventSummary>();
+  const summariesByEvent: Record<string, EventSummary> = {};
 
   for (const event of eventList) {
-    summariesByEvent.set(event.id, {
+    summariesByEvent[event.id] = {
       attend: 0,
       pending: 0,
       absent: 0,
-    });
+      coachAttend: 0,
+      playerAttend: 0,
+    };
   }
 
-  for (const response of allResponses ?? []) {
-    const summary = summariesByEvent.get(response.event_id);
+  for (const response of (allResponses ?? []) as AllResponse[]) {
+    const summary = summariesByEvent[response.event_id];
 
     if (!summary) continue;
 
-    if (response.status === "attend") summary.attend += 1;
-    if (response.status === "pending") summary.pending += 1;
-    if (response.status === "absent") summary.absent += 1;
-  }
+    if (response.status === "attend") {
+      summary.attend += 1;
 
-  const eventsByDate = eventList.reduce<Record<string, CalendarEvent[]>>(
-    (acc, event) => {
-      const dateKey = toDateKey(new Date(event.start_at));
+      const role = roleByUser.get(response.user_id);
 
-      if (!acc[dateKey]) {
-        acc[dateKey] = [];
+      if (role === "admin") {
+        summary.coachAttend += 1;
       }
 
-      acc[dateKey].push(event);
+      if (role === "user") {
+        summary.playerAttend += 1;
+      }
+    }
 
-      return acc;
-    },
-    {}
-  );
+    if (response.status === "pending") {
+      summary.pending += 1;
+    }
+
+    if (response.status === "absent") {
+      summary.absent += 1;
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-3 text-gray-900 sm:p-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">予定・出欠</h1>
-            <p className="mt-2 text-sm text-gray-700">
-              {currentUser.name} さんの予定と出欠回答
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <a href="/user" className="rounded border bg-white px-4 py-2">
-              ユーザー画面に戻る
-            </a>
-
-            <a href="/logout" className="rounded border bg-white px-4 py-2">
-              ログアウト
-            </a>
-          </div>
-        </div>
-
-        <section className="mt-6 rounded-lg bg-white p-2 shadow sm:mt-8 sm:p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-bold text-gray-900">
-              {currentYear}年{currentMonth}月
-            </h2>
-
-            <div className="flex gap-2">
-              <a
-                href={`/user/calendar?year=${prev.year}&month=${prev.month}`}
-                className="rounded border px-3 py-2 text-sm"
-              >
-                前月
-              </a>
-
-              <a
-                href={`/user/calendar?year=${today.getFullYear()}&month=${
-                  today.getMonth() + 1
-                }`}
-                className="rounded border px-3 py-2 text-sm"
-              >
-                今月
-              </a>
-
-              <a
-                href={`/user/calendar?year=${next.year}&month=${next.month}`}
-                className="rounded border px-3 py-2 text-sm"
-              >
-                翌月
-              </a>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-7 border-l border-t text-center text-xs font-bold sm:text-sm">
-            {WEEKDAYS.map((day) => (
-              <div
-                key={day.label}
-                className={
-                  day.value === 6
-                    ? "border-b border-r bg-blue-100 p-1 text-blue-900 sm:p-2"
-                    : day.value === 0
-                      ? "border-b border-r bg-red-100 p-1 text-red-900 sm:p-2"
-                      : "border-b border-r bg-gray-100 p-1 text-gray-900 sm:p-2"
-                }
-              >
-                {day.label}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 border-l text-sm">
-            {monthDays.map((date, index) => {
-              if (!date) {
-                return (
-                  <div
-                    key={`empty-${index}`}
-                    className="min-h-[118px] border-b border-r bg-gray-50 p-1 sm:min-h-36 sm:p-2"
-                  />
-                );
-              }
-
-              const dateKey = toDateKey(date);
-              const dayEvents = eventsByDate[dateKey] ?? [];
-
-              const normalEvents = dayEvents.filter(
-                (event) => event.display_type !== "period"
-              );
-
-              const periodEvents = dayEvents.filter(
-                (event) => event.display_type === "period"
-              );
-
-              const isToday = todayKey === dateKey;
-              const dayOfWeek = date.getDay();
-              const hasHolidayEvent = dayEvents.some(
-                (event) => event.is_holiday
-              );
-
-              const baseCellClass =
-                "min-h-[118px] border-b border-r p-1 sm:min-h-36 sm:p-2";
-
-              const cellClass =
-                hasHolidayEvent || dayOfWeek === 0
-                  ? `${baseCellClass} bg-red-50`
-                  : dayOfWeek === 6
-                    ? `${baseCellClass} bg-blue-50`
-                    : `${baseCellClass} bg-white`;
-
-              return (
-                <div key={dateKey} className={cellClass}>
-                  <div className="flex items-start justify-between">
-                    <p
-                      className={
-                        isToday
-                          ? "flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-bold text-white sm:h-7 sm:w-7 sm:text-sm"
-                          : "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-gray-900 sm:h-7 sm:w-7 sm:text-sm"
-                      }
-                    >
-                      {date.getDate()}
-                    </p>
-                  </div>
-
-                  <div className="mt-1 space-y-1 sm:mt-2">
-                    {normalEvents.map((event) => {
-                      const response = responsesByEvent.get(event.id);
-                      const summary = summariesByEvent.get(event.id);
-
-                      return (
-                        <div
-                          key={event.id}
-                          className="rounded border bg-white p-1 text-left text-[10px] leading-tight shadow-sm sm:px-2 sm:py-2 sm:text-xs"
-                        >
-                          <a
-                            href={`/user/calendar/${event.id}`}
-                            className="block"
-                          >
-                            <p
-                              className="font-bold"
-                              style={compactTextStyle(event.title_color)}
-                            >
-                              {event.title}
-                            </p>
-
-                            {event.time_text && (
-                              <p
-                                className="mt-0.5 truncate font-medium"
-                                style={{
-                                  color: event.time_color || "#111827",
-                                }}
-                              >
-                                {event.time_text}
-                              </p>
-                            )}
-
-                            {event.location && (
-                              <p
-                                className="mt-0.5 hidden truncate sm:block"
-                                style={{
-                                  color: event.location_color || "#111827",
-                                }}
-                              >
-                                {event.location}
-                              </p>
-                            )}
-                          </a>
-
-                          {event.attendance_required ? (
-                            <>
-                              <div className="mt-2 hidden sm:block">
-                                <AttendanceSelect
-                                  eventId={event.id}
-                                  userId={currentUser.id}
-                                  defaultStatus={response?.status ?? ""}
-                                />
-                              </div>
-
-                              <a
-                                href={`/user/calendar/${event.id}`}
-                                className={`mt-1 block rounded px-1 py-1 text-center text-[10px] font-bold sm:hidden ${statusPillClass(
-                                  response?.status
-                                )}`}
-                              >
-                                {statusLongLabel(response?.status)}
-                              </a>
-                            </>
-                          ) : (
-                            <p className="mt-1 rounded bg-gray-100 px-1 py-1 text-center text-[10px] font-medium text-gray-700">
-                              出欠不要
-                            </p>
-                          )}
-
-                          {event.attendance_required && summary && (
-                            <p className="mt-1 whitespace-nowrap text-center text-[10px] font-medium text-gray-800 sm:text-left sm:text-[11px]">
-                              〇{summary.attend} △{summary.pending} ×
-                              {summary.absent}
-                            </p>
-                          )}
-
-                          <a
-                            href={`/user/calendar/${event.id}`}
-                            className="mt-1 hidden text-[11px] text-gray-700 underline sm:inline-block"
-                          >
-                            詳細を見る
-                          </a>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {periodEvents.length > 0 && (
-                    <div className="mt-1 space-y-1 border-t pt-1 sm:mt-2">
-                      {periodEvents.map((event) => (
-                        <a
-                          key={event.id}
-                          href={`/user/calendar/${event.id}`}
-                          className="block rounded bg-teal-500 px-1 py-1 text-center text-[10px] font-bold leading-tight text-white sm:px-2 sm:text-[11px]"
-                          title={event.title}
-                        >
-                          <span
-                            style={{
-                              overflow: "hidden",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                            }}
-                          >
-                            {event.title}
-                          </span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-lg bg-white p-5 shadow">
-          <h2 className="text-lg font-bold">回答状態</h2>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">
-            <span className="rounded bg-green-100 px-3 py-1 text-green-800">
-              〇 出席
-            </span>
-            <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-800">
-              △ 未定
-            </span>
-            <span className="rounded bg-red-100 px-3 py-1 text-red-800">
-              × 欠席
-            </span>
-            <span className="rounded bg-orange-100 px-3 py-1 text-orange-800">
-              未 未回答
-            </span>
-            <span className="rounded bg-teal-100 px-3 py-1 text-teal-800">
-              期間予定・出欠不要
-            </span>
-          </div>
-
-          <p className="mt-3 text-sm text-gray-700">
-            スマホでは予定内の「未回答 / 〇 出席 / △ 未定 / × 欠席」を押すと、詳細画面で回答できます。
-          </p>
-        </section>
-      </div>
-    </main>
+    <UserCalendarClient
+      currentUser={{
+        id: currentUser.id,
+        name: currentUser.name,
+        group_id: currentUser.group_id,
+      }}
+      currentYear={currentYear}
+      currentMonth={currentMonth}
+      todayKey={todayKey}
+      events={eventList}
+      myResponses={(myResponses ?? []) as EventResponse[]}
+      summariesByEvent={summariesByEvent}
+    />
   );
 }
