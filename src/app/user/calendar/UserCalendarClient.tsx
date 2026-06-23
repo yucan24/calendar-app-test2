@@ -76,6 +76,9 @@ const STATUS_OPTIONS = [
   { value: "absent", label: "× 欠席" },
 ];
 
+const LONG_PRESS_MS = 450;
+const SCROLL_MOVE_THRESHOLD = 14;
+
 function toDateKeyFromParts(year: number, month: number, date = 1) {
   return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(
     2,
@@ -101,6 +104,15 @@ function getEventDateKey(value: string) {
 function formatDateLabel(dateKey: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     dateStyle: "full",
+    timeZone: "Asia/Tokyo",
+  }).format(new Date(`${dateKey}T00:00:00+09:00`));
+}
+
+function formatShortDateLabel(dateKey: string) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
     timeZone: "Asia/Tokyo",
   }).format(new Date(`${dateKey}T00:00:00+09:00`));
 }
@@ -152,7 +164,6 @@ function getNextMonth(year: number, month: number) {
 
 function visualLength(value: string | null | undefined) {
   const text = String(value ?? "").replace(/\s+/g, "");
-
   let count = 0;
 
   for (const char of Array.from(text)) {
@@ -274,14 +285,21 @@ export default function UserCalendarClient({
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [bulkDateKeys, setBulkDateKeys] = useState<string[]>([]);
   const [dragDateKeys, setDragDateKeys] = useState<string[]>([]);
+  const [isSelecting, setIsSelecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
-  const dragStateRef = useRef({
-    active: false,
+  const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
+    null
+  );
+
+  const pointerStateRef = useRef({
+    down: false,
+    selectionActive: false,
     startKey: "",
-    moved: false,
-    suppressClick: false,
+    startX: 0,
+    startY: 0,
+    movedBeforeLongPress: false,
   });
 
   const [localResponses, setLocalResponses] = useState<Record<string, string>>(
@@ -309,11 +327,6 @@ export default function UserCalendarClient({
   const monthCells = useMemo(
     () => getMonthDaysMondayStart(currentYear, currentMonth),
     [currentYear, currentMonth]
-  );
-
-  const monthDateKeys = useMemo(
-    () => monthCells.filter(Boolean).map((cell) => cell!.dateKey),
-    [monthCells]
   );
 
   const eventsByDate = useMemo(() => {
@@ -356,16 +369,11 @@ export default function UserCalendarClient({
   const prev = getPrevMonth(currentYear, currentMonth);
   const next = getNextMonth(currentYear, currentMonth);
 
-  function getDateRange(startKey: string, endKey: string) {
-    const startIndex = monthDateKeys.indexOf(startKey);
-    const endIndex = monthDateKeys.indexOf(endKey);
-
-    if (startIndex < 0 || endIndex < 0) return [startKey];
-
-    const from = Math.min(startIndex, endIndex);
-    const to = Math.max(startIndex, endIndex);
-
-    return monthDateKeys.slice(from, to + 1);
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   }
 
   function openDayModal(dateKey: string) {
@@ -375,6 +383,7 @@ export default function UserCalendarClient({
     setSelectedEventId(dayEvents[0]?.id ?? null);
     setBulkDateKeys([]);
     setDragDateKeys([]);
+    setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
   }
@@ -384,6 +393,7 @@ export default function UserCalendarClient({
     setSelectedEventId(eventId);
     setBulkDateKeys([]);
     setDragDateKeys([]);
+    setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
   }
@@ -393,8 +403,24 @@ export default function UserCalendarClient({
     setSelectedEventId(null);
     setBulkDateKeys([]);
     setDragDateKeys([]);
+    setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
+  }
+
+  function removeBulkDate(dateKey: string) {
+    setBulkDateKeys((prev) => {
+      const next = prev.filter((key) => key !== dateKey);
+
+      if (next.length === 0) {
+        setDragDateKeys([]);
+        setIsSelecting(false);
+      }
+
+      return next;
+    });
+
+    setDragDateKeys((prev) => prev.filter((key) => key !== dateKey));
   }
 
   function saveAttendance(eventId: string, nextStatus: string) {
@@ -465,26 +491,73 @@ export default function UserCalendarClient({
     });
   }
 
+  function addDragDate(dateKey: string) {
+    setDragDateKeys((prev) => {
+      if (prev.includes(dateKey)) return prev;
+      return uniqueSortedDateKeys([...prev, dateKey]);
+    });
+  }
+
+  function startLongPressSelection(dateKey: string) {
+    if (!pointerStateRef.current.down) return;
+    if (pointerStateRef.current.movedBeforeLongPress) return;
+
+    pointerStateRef.current.selectionActive = true;
+
+    setSelectedDateKey(null);
+    setSelectedEventId(null);
+    setBulkDateKeys([]);
+    setDragDateKeys([dateKey]);
+    setIsSelecting(true);
+    setErrorMessage("");
+    setSaveMessage("");
+
+    if ("vibrate" in navigator) {
+      navigator.vibrate(25);
+    }
+  }
+
   function handlePointerDown(
     event: ReactPointerEvent<HTMLDivElement>,
     dateKey: string
   ) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
-    dragStateRef.current = {
-      active: true,
+    clearLongPressTimer();
+
+    pointerStateRef.current = {
+      down: true,
+      selectionActive: false,
       startKey: dateKey,
-      moved: false,
-      suppressClick: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      movedBeforeLongPress: false,
     };
 
-    setDragDateKeys([dateKey]);
-    setSaveMessage("");
-    setErrorMessage("");
+    longPressTimerRef.current = window.setTimeout(() => {
+      startLongPressSelection(dateKey);
+    }, LONG_PRESS_MS);
   }
 
   function handleCalendarPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragStateRef.current.active) return;
+    if (!pointerStateRef.current.down) return;
+
+    const dx = event.clientX - pointerStateRef.current.startX;
+    const dy = event.clientY - pointerStateRef.current.startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (
+      !pointerStateRef.current.selectionActive &&
+      distance > SCROLL_MOVE_THRESHOLD
+    ) {
+      pointerStateRef.current.movedBeforeLongPress = true;
+      clearLongPressTimer();
+      return;
+    }
+
+    if (!pointerStateRef.current.selectionActive) return;
+
+    event.preventDefault();
 
     const target = document.elementFromPoint(
       event.clientX,
@@ -497,53 +570,50 @@ export default function UserCalendarClient({
 
     if (!dateKey) return;
 
-    const range = getDateRange(dragStateRef.current.startKey, dateKey);
-
-    if (
-      range.length > 1 ||
-      dateKey !== dragStateRef.current.startKey
-    ) {
-      dragStateRef.current.moved = true;
-    }
-
-    setDragDateKeys(range);
-    event.preventDefault();
+    addDragDate(dateKey);
   }
 
   function handleCalendarPointerUp() {
-    if (!dragStateRef.current.active) return;
+    clearLongPressTimer();
 
-    const range = dragDateKeys.length
-      ? uniqueSortedDateKeys(dragDateKeys)
-      : [dragStateRef.current.startKey];
+    if (!pointerStateRef.current.down) return;
 
-    const shouldOpenBulk =
-      dragStateRef.current.moved || uniqueSortedDateKeys(range).length > 1;
+    const wasSelecting = pointerStateRef.current.selectionActive;
+    const wasScrollIntent = pointerStateRef.current.movedBeforeLongPress;
+    const startKey = pointerStateRef.current.startKey;
 
-    dragStateRef.current.active = false;
+    pointerStateRef.current.down = false;
+    pointerStateRef.current.selectionActive = false;
+    pointerStateRef.current.movedBeforeLongPress = false;
 
-    if (shouldOpenBulk) {
-      dragStateRef.current.suppressClick = true;
+    if (wasSelecting) {
+      const selectedKeys = uniqueSortedDateKeys(
+        dragDateKeys.length > 0 ? dragDateKeys : [startKey]
+      );
 
-      setSelectedDateKey(null);
-      setSelectedEventId(null);
-      setBulkDateKeys(range);
-      setDragDateKeys(range);
-      setErrorMessage("");
-      setSaveMessage("");
-
-      window.setTimeout(() => {
-        dragStateRef.current.suppressClick = false;
-      }, 300);
-
+      setBulkDateKeys(selectedKeys);
+      setDragDateKeys(selectedKeys);
+      setIsSelecting(false);
       return;
     }
 
-    openDayModal(dragStateRef.current.startKey);
+    if (wasScrollIntent) {
+      setIsSelecting(false);
+      setDragDateKeys([]);
+      return;
+    }
+
+    openDayModal(startKey);
   }
 
   function handleCalendarPointerCancel() {
-    dragStateRef.current.active = false;
+    clearLongPressTimer();
+
+    pointerStateRef.current.down = false;
+    pointerStateRef.current.selectionActive = false;
+    pointerStateRef.current.movedBeforeLongPress = false;
+
+    setIsSelecting(false);
     setDragDateKeys([]);
   }
 
@@ -592,6 +662,12 @@ export default function UserCalendarClient({
             </a>
           </div>
 
+          {isSelecting && (
+            <p className="mt-3 rounded bg-yellow-100 p-2 text-center text-sm font-bold text-yellow-900">
+              選択中：指を動かして日付を追加してください。
+            </p>
+          )}
+
           <div className="mt-4 grid grid-cols-7 border-l border-t text-center text-sm font-bold">
             {WEEKDAYS.map((day) => (
               <div
@@ -610,7 +686,7 @@ export default function UserCalendarClient({
           </div>
 
           <div
-            className="grid touch-none grid-cols-7 border-l border-gray-300 text-center"
+            className="grid select-none grid-cols-7 border-l border-gray-300 text-center"
             onPointerMove={handleCalendarPointerMove}
             onPointerUp={handleCalendarPointerUp}
             onPointerCancel={handleCalendarPointerCancel}
@@ -690,13 +766,14 @@ export default function UserCalendarClient({
                         <button
                           key={event.id}
                           type="button"
+                          onPointerDown={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
+                          onPointerUp={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
                           onClick={(clickEvent) => {
                             clickEvent.stopPropagation();
-
-                            if (dragStateRef.current.suppressClick) {
-                              return;
-                            }
-
                             openEventModal(cell.dateKey, event.id);
                           }}
                           className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
@@ -759,6 +836,12 @@ export default function UserCalendarClient({
                     {normalEvents.length > 2 && (
                       <button
                         type="button"
+                        onPointerDown={(pointerEvent) =>
+                          pointerEvent.stopPropagation()
+                        }
+                        onPointerUp={(pointerEvent) =>
+                          pointerEvent.stopPropagation()
+                        }
                         onClick={(clickEvent) => {
                           clickEvent.stopPropagation();
                           openDayModal(cell.dateKey);
@@ -776,13 +859,14 @@ export default function UserCalendarClient({
                         <button
                           key={event.id}
                           type="button"
+                          onPointerDown={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
+                          onPointerUp={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
                           onClick={(clickEvent) => {
                             clickEvent.stopPropagation();
-
-                            if (dragStateRef.current.suppressClick) {
-                              return;
-                            }
-
                             openEventModal(cell.dateKey, event.id);
                           }}
                           className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
@@ -799,6 +883,12 @@ export default function UserCalendarClient({
                       {periodEvents.length > 1 && (
                         <button
                           type="button"
+                          onPointerDown={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
+                          onPointerUp={(pointerEvent) =>
+                            pointerEvent.stopPropagation()
+                          }
                           onClick={(clickEvent) => {
                             clickEvent.stopPropagation();
                             openDayModal(cell.dateKey);
@@ -821,7 +911,7 @@ export default function UserCalendarClient({
 
           <p className="mt-2 text-sm text-gray-700">
             日付タイルまたは予定をタップすると、詳細モーダルが開きます。
-            日付をドラッグすると、複数日の予定をまとめて選択できます。
+            複数日を選ぶ場合は、日付を長押ししてからドラッグしてください。
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
@@ -873,6 +963,27 @@ export default function UserCalendarClient({
             <div className="mt-4 rounded bg-yellow-50 p-3 text-sm text-yellow-900">
               選択した日付内の「出欠回答が必要な予定」にまとめて回答します。
               出欠不要の予定は一覧には表示しますが、保存対象からは除外します。
+            </div>
+
+            <div className="mt-4">
+              <p className="text-sm font-bold">選択日</p>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {bulkDateKeys.map((dateKey) => (
+                  <button
+                    key={dateKey}
+                    type="button"
+                    onClick={() => removeBulkDate(dateKey)}
+                    className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-900"
+                  >
+                    {formatShortDateLabel(dateKey)} ×
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500">
+                不要な日付はタップすると選択から外せます。
+              </p>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -957,9 +1068,11 @@ export default function UserCalendarClient({
 
               <div className="mt-3 min-h-5 text-sm">
                 {isPending && <span className="text-gray-600">保存中...</span>}
+
                 {!isPending && saveMessage && (
                   <span className="text-green-700">{saveMessage}</span>
                 )}
+
                 {!isPending && errorMessage && (
                   <span className="text-red-600">{errorMessage}</span>
                 )}
@@ -1174,9 +1287,11 @@ export default function UserCalendarClient({
                         {isPending && (
                           <span className="text-gray-600">保存中...</span>
                         )}
+
                         {!isPending && saveMessage && (
                           <span className="text-green-700">{saveMessage}</span>
                         )}
+
                         {!isPending && errorMessage && (
                           <span className="text-red-600">{errorMessage}</span>
                         )}
