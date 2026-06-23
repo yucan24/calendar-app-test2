@@ -3,9 +3,11 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import { updateUserAttendance } from "./actions";
@@ -139,18 +141,12 @@ function getMonthDaysMondayStart(year: number, month: number) {
 }
 
 function getPrevMonth(year: number, month: number) {
-  if (month === 1) {
-    return { year: year - 1, month: 12 };
-  }
-
+  if (month === 1) return { year: year - 1, month: 12 };
   return { year, month: month - 1 };
 }
 
 function getNextMonth(year: number, month: number) {
-  if (month === 12) {
-    return { year: year + 1, month: 1 };
-  }
-
+  if (month === 12) return { year: year + 1, month: 1 };
   return { year, month: month + 1 };
 }
 
@@ -160,7 +156,6 @@ function visualLength(value: string | null | undefined) {
   let count = 0;
 
   for (const char of Array.from(text)) {
-    // 半角英数字・記号は0.5文字扱い、それ以外は全角1文字扱い
     count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
   }
 
@@ -186,8 +181,6 @@ function calendarTextStyle(
   const length = visualLength(text);
   const hasLineBreak = text.includes("\n");
 
-  // GAS版寄せ：
-  // 改行なし、全角5文字以内は必ず1行表示を優先する
   if (!hasLineBreak && length <= 5) {
     const fontSize =
       length <= 2.5
@@ -195,11 +188,11 @@ function calendarTextStyle(
         : length <= 3
           ? "12px"
           : length <= 4
-            ? "10.5px"
-            : "8.7px";
+            ? "10.2px"
+            : "8.4px";
 
     const letterSpacing =
-      length >= 5 ? "-0.18em" : length >= 4 ? "-0.1em" : "-0.04em";
+      length >= 5 ? "-0.2em" : length >= 4 ? "-0.12em" : "-0.04em";
 
     return {
       color: color || "#111827",
@@ -211,12 +204,11 @@ function calendarTextStyle(
       fontSize,
       lineHeight: "1.05",
       letterSpacing,
-      transform: length >= 5 ? "scaleX(0.96)" : "none",
+      transform: length >= 5 ? "scaleX(0.94)" : "none",
       transformOrigin: "center",
     };
   }
 
-  // 長い文字だけ最大2行表示
   return {
     color: color || "#111827",
     display: "-webkit-box",
@@ -254,23 +246,16 @@ function statusPillClass(status: string | null | undefined) {
 function statusButtonClass(status: string, currentStatus: string) {
   const isSelected = status === currentStatus;
 
-  if (!isSelected) {
-    return "border-gray-300 bg-white text-gray-700";
-  }
-
-  if (status === "attend") {
-    return "border-green-500 bg-green-500 text-white";
-  }
-
-  if (status === "pending") {
-    return "border-yellow-500 bg-yellow-500 text-white";
-  }
-
-  if (status === "absent") {
-    return "border-red-500 bg-red-500 text-white";
-  }
+  if (!isSelected) return "border-gray-300 bg-white text-gray-700";
+  if (status === "attend") return "border-green-500 bg-green-500 text-white";
+  if (status === "pending") return "border-yellow-500 bg-yellow-500 text-white";
+  if (status === "absent") return "border-red-500 bg-red-500 text-white";
 
   return "border-orange-500 bg-orange-500 text-white";
+}
+
+function uniqueSortedDateKeys(dateKeys: string[]) {
+  return Array.from(new Set(dateKeys)).sort();
 }
 
 export default function UserCalendarClient({
@@ -287,7 +272,17 @@ export default function UserCalendarClient({
 
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [bulkDateKeys, setBulkDateKeys] = useState<string[]>([]);
+  const [dragDateKeys, setDragDateKeys] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+
+  const dragStateRef = useRef({
+    active: false,
+    startKey: "",
+    moved: false,
+    suppressClick: false,
+  });
 
   const [localResponses, setLocalResponses] = useState<Record<string, string>>(
     () => {
@@ -316,16 +311,18 @@ export default function UserCalendarClient({
     [currentYear, currentMonth]
   );
 
+  const monthDateKeys = useMemo(
+    () => monthCells.filter(Boolean).map((cell) => cell!.dateKey),
+    [monthCells]
+  );
+
   const eventsByDate = useMemo(() => {
     const result: Record<string, CalendarEvent[]> = {};
 
     for (const event of events) {
       const dateKey = getEventDateKey(event.start_at);
 
-      if (!result[dateKey]) {
-        result[dateKey] = [];
-      }
-
+      if (!result[dateKey]) result[dateKey] = [];
       result[dateKey].push(event);
     }
 
@@ -341,31 +338,68 @@ export default function UserCalendarClient({
       ? events.find((event) => event.id === selectedEventId) ?? null
       : null;
 
+  const bulkEvents = useMemo(() => {
+    return uniqueSortedDateKeys(bulkDateKeys).flatMap((dateKey) => {
+      const dayEvents = eventsByDate[dateKey] ?? [];
+
+      return dayEvents.map((event) => ({
+        dateKey,
+        event,
+      }));
+    });
+  }, [bulkDateKeys, eventsByDate]);
+
+  const bulkAnswerTargets = bulkEvents.filter(
+    ({ event }) => event.attendance_required
+  );
+
   const prev = getPrevMonth(currentYear, currentMonth);
   const next = getNextMonth(currentYear, currentMonth);
+
+  function getDateRange(startKey: string, endKey: string) {
+    const startIndex = monthDateKeys.indexOf(startKey);
+    const endIndex = monthDateKeys.indexOf(endKey);
+
+    if (startIndex < 0 || endIndex < 0) return [startKey];
+
+    const from = Math.min(startIndex, endIndex);
+    const to = Math.max(startIndex, endIndex);
+
+    return monthDateKeys.slice(from, to + 1);
+  }
 
   function openDayModal(dateKey: string) {
     const dayEvents = eventsByDate[dateKey] ?? [];
 
     setSelectedDateKey(dateKey);
     setSelectedEventId(dayEvents[0]?.id ?? null);
+    setBulkDateKeys([]);
+    setDragDateKeys([]);
     setErrorMessage("");
+    setSaveMessage("");
   }
 
   function openEventModal(dateKey: string, eventId: string) {
     setSelectedDateKey(dateKey);
     setSelectedEventId(eventId);
+    setBulkDateKeys([]);
+    setDragDateKeys([]);
     setErrorMessage("");
+    setSaveMessage("");
   }
 
   function closeModal() {
     setSelectedDateKey(null);
     setSelectedEventId(null);
+    setBulkDateKeys([]);
+    setDragDateKeys([]);
     setErrorMessage("");
+    setSaveMessage("");
   }
 
   function saveAttendance(eventId: string, nextStatus: string) {
     setErrorMessage("");
+    setSaveMessage("");
 
     setLocalResponses((prevState) => {
       const nextState = { ...prevState };
@@ -382,11 +416,135 @@ export default function UserCalendarClient({
     startTransition(async () => {
       try {
         await updateUserAttendance(eventId, currentUser.id, nextStatus);
+        setSaveMessage("保存しました。");
         router.refresh();
       } catch {
         setErrorMessage("保存に失敗しました。通信状態を確認してください。");
       }
     });
+  }
+
+  function saveBulkAttendance(nextStatus: string) {
+    setErrorMessage("");
+    setSaveMessage("");
+
+    const targetIds = Array.from(
+      new Set(bulkAnswerTargets.map(({ event }) => event.id))
+    );
+
+    if (targetIds.length === 0) {
+      setErrorMessage("出欠回答できる予定が選択されていません。");
+      return;
+    }
+
+    setLocalResponses((prevState) => {
+      const nextState = { ...prevState };
+
+      for (const eventId of targetIds) {
+        if (nextStatus) {
+          nextState[eventId] = nextStatus;
+        } else {
+          delete nextState[eventId];
+        }
+      }
+
+      return nextState;
+    });
+
+    startTransition(async () => {
+      try {
+        for (const eventId of targetIds) {
+          await updateUserAttendance(eventId, currentUser.id, nextStatus);
+        }
+
+        setSaveMessage(`${targetIds.length}件の出欠を保存しました。`);
+        router.refresh();
+      } catch {
+        setErrorMessage("まとめて保存に失敗しました。通信状態を確認してください。");
+      }
+    });
+  }
+
+  function handlePointerDown(
+    event: ReactPointerEvent<HTMLDivElement>,
+    dateKey: string
+  ) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    dragStateRef.current = {
+      active: true,
+      startKey: dateKey,
+      moved: false,
+      suppressClick: false,
+    };
+
+    setDragDateKeys([dateKey]);
+    setSaveMessage("");
+    setErrorMessage("");
+  }
+
+  function handleCalendarPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragStateRef.current.active) return;
+
+    const target = document.elementFromPoint(
+      event.clientX,
+      event.clientY
+    ) as HTMLElement | null;
+
+    const dateKey = target
+      ?.closest("[data-calendar-date-key]")
+      ?.getAttribute("data-calendar-date-key");
+
+    if (!dateKey) return;
+
+    const range = getDateRange(dragStateRef.current.startKey, dateKey);
+
+    if (
+      range.length > 1 ||
+      dateKey !== dragStateRef.current.startKey
+    ) {
+      dragStateRef.current.moved = true;
+    }
+
+    setDragDateKeys(range);
+    event.preventDefault();
+  }
+
+  function handleCalendarPointerUp() {
+    if (!dragStateRef.current.active) return;
+
+    const range = dragDateKeys.length
+      ? uniqueSortedDateKeys(dragDateKeys)
+      : [dragStateRef.current.startKey];
+
+    const shouldOpenBulk =
+      dragStateRef.current.moved || uniqueSortedDateKeys(range).length > 1;
+
+    dragStateRef.current.active = false;
+
+    if (shouldOpenBulk) {
+      dragStateRef.current.suppressClick = true;
+
+      setSelectedDateKey(null);
+      setSelectedEventId(null);
+      setBulkDateKeys(range);
+      setDragDateKeys(range);
+      setErrorMessage("");
+      setSaveMessage("");
+
+      window.setTimeout(() => {
+        dragStateRef.current.suppressClick = false;
+      }, 300);
+
+      return;
+    }
+
+    openDayModal(dragStateRef.current.startKey);
+  }
+
+  function handleCalendarPointerCancel() {
+    dragStateRef.current.active = false;
+    setDragDateKeys([]);
   }
 
   return (
@@ -451,7 +609,12 @@ export default function UserCalendarClient({
             ))}
           </div>
 
-          <div className="grid grid-cols-7 border-l border-gray-300 text-center">
+          <div
+            className="grid touch-none grid-cols-7 border-l border-gray-300 text-center"
+            onPointerMove={handleCalendarPointerMove}
+            onPointerUp={handleCalendarPointerUp}
+            onPointerCancel={handleCalendarPointerCancel}
+          >
             {monthCells.map((cell, index) => {
               if (!cell) {
                 return (
@@ -476,23 +639,30 @@ export default function UserCalendarClient({
                 (event) => event.is_holiday
               );
 
+              const isDraggingSelected = dragDateKeys.includes(cell.dateKey);
+
               const baseCellClass =
                 "min-h-[112px] cursor-pointer border-b border-r border-gray-300 p-1 text-center active:bg-yellow-100 sm:min-h-36";
 
               const cellClass =
-                hasHolidayEvent || cell.weekday === 0
-                  ? `${baseCellClass} bg-red-50`
-                  : cell.weekday === 6
-                    ? `${baseCellClass} bg-blue-50`
-                    : `${baseCellClass} bg-white`;
+                isDraggingSelected
+                  ? `${baseCellClass} bg-yellow-100 ring-2 ring-yellow-400`
+                  : hasHolidayEvent || cell.weekday === 0
+                    ? `${baseCellClass} bg-red-50`
+                    : cell.weekday === 6
+                      ? `${baseCellClass} bg-blue-50`
+                      : `${baseCellClass} bg-white`;
 
               return (
                 <div
                   key={cell.dateKey}
                   role="button"
                   tabIndex={0}
+                  data-calendar-date-key={cell.dateKey}
                   className={cellClass}
-                  onClick={() => openDayModal(cell.dateKey)}
+                  onPointerDown={(event) =>
+                    handlePointerDown(event, cell.dateKey)
+                  }
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       openDayModal(cell.dateKey);
@@ -522,6 +692,11 @@ export default function UserCalendarClient({
                           type="button"
                           onClick={(clickEvent) => {
                             clickEvent.stopPropagation();
+
+                            if (dragStateRef.current.suppressClick) {
+                              return;
+                            }
+
                             openEventModal(cell.dateKey, event.id);
                           }}
                           className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
@@ -561,9 +736,10 @@ export default function UserCalendarClient({
                           )}
 
                           {event.attendance_required && summary && (
-                            <span className="mt-0.5 block whitespace-nowrap text-[8px] font-medium leading-tight tracking-[-0.08em] text-gray-900">
-                              指導者:{summary.coachAttend} 選手:
-                              {summary.playerAttend}
+                            <span className="mt-0.5 block text-[9px] font-medium leading-tight text-gray-900">
+                              指導者:{summary.coachAttend}
+                              <br />
+                              選手:{summary.playerAttend}
                             </span>
                           )}
 
@@ -602,6 +778,11 @@ export default function UserCalendarClient({
                           type="button"
                           onClick={(clickEvent) => {
                             clickEvent.stopPropagation();
+
+                            if (dragStateRef.current.suppressClick) {
+                              return;
+                            }
+
                             openEventModal(cell.dateKey, event.id);
                           }}
                           className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
@@ -640,7 +821,7 @@ export default function UserCalendarClient({
 
           <p className="mt-2 text-sm text-gray-700">
             日付タイルまたは予定をタップすると、詳細モーダルが開きます。
-            出欠回答もモーダル内で変更できます。
+            日付をドラッグすると、複数日の予定をまとめて選択できます。
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2 text-sm">
@@ -662,6 +843,131 @@ export default function UserCalendarClient({
           </div>
         </section>
       </div>
+
+      {bulkDateKeys.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
+          onClick={closeModal}
+        >
+          <div
+            className="max-h-[calc(100vh-24px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-gray-600">
+                  {bulkDateKeys.length}日分を選択中
+                </p>
+                <h2 className="mt-1 text-xl font-bold">まとめて出欠回答</h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-full bg-gray-100 px-3 py-1 text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 rounded bg-yellow-50 p-3 text-sm text-yellow-900">
+              選択した日付内の「出欠回答が必要な予定」にまとめて回答します。
+              出欠不要の予定は一覧には表示しますが、保存対象からは除外します。
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {bulkEvents.length === 0 ? (
+                <p className="rounded bg-gray-50 p-3 text-sm text-gray-600">
+                  選択範囲に予定はありません。
+                </p>
+              ) : (
+                bulkEvents.map(({ dateKey, event }) => {
+                  const currentStatus = localResponses[event.id] ?? "";
+
+                  return (
+                    <div
+                      key={`${dateKey}-${event.id}`}
+                      className="rounded border bg-white p-3"
+                    >
+                      <p className="text-xs text-gray-500">
+                        {formatDateLabel(dateKey)}
+                      </p>
+
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="font-bold">{event.title}</p>
+
+                        {event.display_type === "period" && (
+                          <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
+                            期間予定
+                          </span>
+                        )}
+
+                        {!event.attendance_required && (
+                          <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                            出欠不要
+                          </span>
+                        )}
+
+                        {event.attendance_required && (
+                          <span
+                            className={`rounded px-2 py-1 text-xs font-bold ${statusPillClass(
+                              currentStatus
+                            )}`}
+                          >
+                            {statusLongLabel(currentStatus)}
+                          </span>
+                        )}
+                      </div>
+
+                      {event.time_text && (
+                        <p className="mt-1 text-sm text-gray-700">
+                          時間：{event.time_text}
+                        </p>
+                      )}
+
+                      {event.location && (
+                        <p className="mt-1 text-sm text-gray-700">
+                          場所：{event.location}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-5">
+              <p className="text-sm font-bold">
+                保存対象：{bulkAnswerTargets.length}件
+              </p>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {STATUS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={isPending || bulkAnswerTargets.length === 0}
+                    onClick={() => saveBulkAttendance(option.value)}
+                    className="rounded border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-gray-800 disabled:opacity-40"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3 min-h-5 text-sm">
+                {isPending && <span className="text-gray-600">保存中...</span>}
+                {!isPending && saveMessage && (
+                  <span className="text-green-700">{saveMessage}</span>
+                )}
+                {!isPending && errorMessage && (
+                  <span className="text-red-600">{errorMessage}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedDateKey && (
         <div
@@ -868,7 +1174,9 @@ export default function UserCalendarClient({
                         {isPending && (
                           <span className="text-gray-600">保存中...</span>
                         )}
-
+                        {!isPending && saveMessage && (
+                          <span className="text-green-700">{saveMessage}</span>
+                        )}
                         {!isPending && errorMessage && (
                           <span className="text-red-600">{errorMessage}</span>
                         )}
