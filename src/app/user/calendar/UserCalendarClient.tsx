@@ -284,12 +284,15 @@ export default function UserCalendarClient({
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [bulkDateKeys, setBulkDateKeys] = useState<string[]>([]);
-  const [dragDateKeys, setDragDateKeys] = useState<string[]>([]);
+  const [dragDateKeys, setDragDateKeysState] = useState<string[]>([]);
   const [isSelecting, setIsSelecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
   const longPressTimerRef = useRef<number | null>(null);
+  const dragDateKeysRef = useRef<string[]>([]);
+  const captureElementRef = useRef<HTMLElement | null>(null);
+  const capturedPointerIdRef = useRef<number | null>(null);
 
   const pointerStateRef = useRef({
     down: false,
@@ -321,6 +324,34 @@ export default function UserCalendarClient({
 
     setLocalResponses(result);
   }, [myResponses]);
+
+  useEffect(() => {
+    if (!isSelecting) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    const originalOverscrollBehavior = document.body.style.overscrollBehavior;
+
+    function preventTouchMove(event: TouchEvent) {
+      event.preventDefault();
+    }
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    document.body.style.overscrollBehavior = "none";
+
+    document.addEventListener("touchmove", preventTouchMove, {
+      passive: false,
+    });
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+      document.body.style.overscrollBehavior = originalOverscrollBehavior;
+
+      document.removeEventListener("touchmove", preventTouchMove);
+    };
+  }, [isSelecting]);
 
   const monthCells = useMemo(
     () => getMonthDaysMondayStart(currentYear, currentMonth),
@@ -367,11 +398,35 @@ export default function UserCalendarClient({
   const prev = getPrevMonth(currentYear, currentMonth);
   const next = getNextMonth(currentYear, currentMonth);
 
+  function setDragKeys(dateKeys: string[]) {
+    const next = uniqueSortedDateKeys(dateKeys);
+    dragDateKeysRef.current = next;
+    setDragDateKeysState(next);
+  }
+
   function clearLongPressTimer() {
-    if (longPressTimerRef.current) {
+    if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+  }
+
+  function releasePointerCapture() {
+    const element = captureElementRef.current;
+    const pointerId = capturedPointerIdRef.current;
+
+    if (element && pointerId !== null) {
+      try {
+        if (element.hasPointerCapture(pointerId)) {
+          element.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    captureElementRef.current = null;
+    capturedPointerIdRef.current = null;
   }
 
   function openDayModal(dateKey: string) {
@@ -380,7 +435,7 @@ export default function UserCalendarClient({
     setSelectedDateKey(dateKey);
     setSelectedEventId(dayEvents[0]?.id ?? null);
     setBulkDateKeys([]);
-    setDragDateKeys([]);
+    setDragKeys([]);
     setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
@@ -390,7 +445,7 @@ export default function UserCalendarClient({
     setSelectedDateKey(dateKey);
     setSelectedEventId(eventId);
     setBulkDateKeys([]);
-    setDragDateKeys([]);
+    setDragKeys([]);
     setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
@@ -400,7 +455,7 @@ export default function UserCalendarClient({
     setSelectedDateKey(null);
     setSelectedEventId(null);
     setBulkDateKeys([]);
-    setDragDateKeys([]);
+    setDragKeys([]);
     setIsSelecting(false);
     setErrorMessage("");
     setSaveMessage("");
@@ -411,14 +466,14 @@ export default function UserCalendarClient({
       const next = prev.filter((key) => key !== dateKey);
 
       if (next.length === 0) {
-        setDragDateKeys([]);
+        setDragKeys([]);
         setIsSelecting(false);
       }
 
       return next;
     });
 
-    setDragDateKeys((prev) => prev.filter((key) => key !== dateKey));
+    setDragKeys(dragDateKeysRef.current.filter((key) => key !== dateKey));
   }
 
   function saveAttendance(eventId: string, nextStatus: string) {
@@ -490,10 +545,11 @@ export default function UserCalendarClient({
   }
 
   function addDragDate(dateKey: string) {
-    setDragDateKeys((prev) => {
-      if (prev.includes(dateKey)) return prev;
-      return uniqueSortedDateKeys([...prev, dateKey]);
-    });
+    const current = dragDateKeysRef.current;
+
+    if (current.includes(dateKey)) return;
+
+    setDragKeys([...current, dateKey]);
   }
 
   function startLongPressSelection(dateKey: string) {
@@ -505,7 +561,7 @@ export default function UserCalendarClient({
     setSelectedDateKey(null);
     setSelectedEventId(null);
     setBulkDateKeys([]);
-    setDragDateKeys([dateKey]);
+    setDragKeys([dateKey]);
     setIsSelecting(true);
     setErrorMessage("");
     setSaveMessage("");
@@ -522,6 +578,15 @@ export default function UserCalendarClient({
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     clearLongPressTimer();
+
+    captureElementRef.current = event.currentTarget;
+    capturedPointerIdRef.current = event.pointerId;
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
 
     pointerStateRef.current = {
       down: true,
@@ -556,6 +621,7 @@ export default function UserCalendarClient({
     if (!pointerStateRef.current.selectionActive) return;
 
     event.preventDefault();
+    event.stopPropagation();
 
     const target = document.elementFromPoint(
       event.clientX,
@@ -584,20 +650,24 @@ export default function UserCalendarClient({
     pointerStateRef.current.selectionActive = false;
     pointerStateRef.current.movedBeforeLongPress = false;
 
+    releasePointerCapture();
+
     if (wasSelecting) {
       const selectedKeys = uniqueSortedDateKeys(
-        dragDateKeys.length > 0 ? dragDateKeys : [startKey]
+        dragDateKeysRef.current.length > 0
+          ? dragDateKeysRef.current
+          : [startKey]
       );
 
       setBulkDateKeys(selectedKeys);
-      setDragDateKeys(selectedKeys);
+      setDragKeys(selectedKeys);
       setIsSelecting(false);
       return;
     }
 
     if (wasScrollIntent) {
       setIsSelecting(false);
-      setDragDateKeys([]);
+      setDragKeys([]);
       return;
     }
 
@@ -606,13 +676,14 @@ export default function UserCalendarClient({
 
   function handleCalendarPointerCancel() {
     clearLongPressTimer();
+    releasePointerCapture();
 
     pointerStateRef.current.down = false;
     pointerStateRef.current.selectionActive = false;
     pointerStateRef.current.movedBeforeLongPress = false;
 
     setIsSelecting(false);
-    setDragDateKeys([]);
+    setDragKeys([]);
   }
 
   return (
@@ -684,7 +755,11 @@ export default function UserCalendarClient({
           </div>
 
           <div
-            className="grid select-none grid-cols-7 border-l border-gray-300 text-center"
+            className={
+              isSelecting
+                ? "grid touch-none select-none grid-cols-7 border-l border-gray-300 text-center"
+                : "grid touch-pan-y select-none grid-cols-7 border-l border-gray-300 text-center"
+            }
             onPointerMove={handleCalendarPointerMove}
             onPointerUp={handleCalendarPointerUp}
             onPointerCancel={handleCalendarPointerCancel}
