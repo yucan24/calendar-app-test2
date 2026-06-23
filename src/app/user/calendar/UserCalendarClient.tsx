@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
 import { useRouter } from "next/navigation";
 import { updateUserAttendance } from "./actions";
 
@@ -154,6 +160,7 @@ function visualLength(value: string | null | undefined) {
   let count = 0;
 
   for (const char of Array.from(text)) {
+    // 半角英数字・記号は0.5文字扱い、それ以外は全角1文字扱い
     count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
   }
 
@@ -171,58 +178,56 @@ function displayText(value: string | null | undefined) {
     .join("\n");
 }
 
-function compactStyle(
+function calendarTextStyle(
   value: string | null | undefined,
   color: string | null | undefined
-) {
+): CSSProperties {
   const text = displayText(value);
   const length = visualLength(text);
   const hasLineBreak = text.includes("\n");
 
+  // GAS版寄せ：
+  // 改行なし、全角5文字以内は必ず1行表示を優先する
   if (!hasLineBreak && length <= 5) {
+    const fontSize =
+      length <= 2.5
+        ? "13px"
+        : length <= 3
+          ? "12px"
+          : length <= 4
+            ? "10.5px"
+            : "8.7px";
+
+    const letterSpacing =
+      length >= 5 ? "-0.18em" : length >= 4 ? "-0.1em" : "-0.04em";
+
     return {
       color: color || "#111827",
-      whiteSpace: "nowrap" as const,
-      overflow: "hidden",
+      display: "block",
+      width: "100%",
+      whiteSpace: "nowrap",
+      overflow: "visible",
       textOverflow: "clip",
-      lineHeight: "1.08",
-      letterSpacing:
-        length >= 5 ? "-0.1em" : length >= 4 ? "-0.06em" : "-0.03em",
+      fontSize,
+      lineHeight: "1.05",
+      letterSpacing,
+      transform: length >= 5 ? "scaleX(0.96)" : "none",
+      transformOrigin: "center",
     };
   }
 
+  // 長い文字だけ最大2行表示
   return {
     color: color || "#111827",
-    whiteSpace: "pre-line" as const,
-    overflow: "hidden",
     display: "-webkit-box",
+    overflow: "hidden",
+    whiteSpace: "pre-line",
     WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical" as const,
-    lineHeight: "1.12",
+    WebkitBoxOrient: "vertical",
+    fontSize: length >= 12 ? "8px" : length >= 8 ? "8.5px" : "9px",
+    lineHeight: "1.1",
     letterSpacing: length >= 10 ? "-0.08em" : "-0.04em",
   };
-}
-
-function compactFontClass(value: string | null | undefined) {
-  const length = visualLength(value);
-
-  if (length <= 3) {
-    return "text-[12px]";
-  }
-
-  if (length <= 4) {
-    return "text-[11px]";
-  }
-
-  if (length <= 5) {
-    return "text-[10px]";
-  }
-
-  if (length <= 7) {
-    return "text-[9px]";
-  }
-
-  return "text-[8px]";
 }
 
 function statusCalendarLabel(status: string | null | undefined) {
@@ -519,13 +524,11 @@ export default function UserCalendarClient({
                             clickEvent.stopPropagation();
                             openEventModal(cell.dateKey, event.id);
                           }}
-                          className="block w-full rounded bg-white px-[1px] py-1 text-center leading-tight shadow-sm"
+                          className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
                         >
                           <span
-                            className={`block font-bold ${compactFontClass(
-                              event.title
-                            )}`}
-                            style={compactStyle(
+                            className="block font-bold"
+                            style={calendarTextStyle(
                               event.title,
                               event.title_color
                             )}
@@ -535,10 +538,8 @@ export default function UserCalendarClient({
 
                           {event.location && (
                             <span
-                              className={`mt-0.5 block ${compactFontClass(
-                                event.location
-                              )}`}
-                              style={compactStyle(
+                              className="mt-0.5 block"
+                              style={calendarTextStyle(
                                 event.location,
                                 event.location_color
                               )}
@@ -549,10 +550,8 @@ export default function UserCalendarClient({
 
                           {event.time_text && (
                             <span
-                              className={`mt-0.5 block ${compactFontClass(
-                                event.time_text
-                              )}`}
-                              style={compactStyle(
+                              className="mt-0.5 block"
+                              style={calendarTextStyle(
                                 event.time_text,
                                 event.time_color
                               )}
@@ -562,10 +561,9 @@ export default function UserCalendarClient({
                           )}
 
                           {event.attendance_required && summary && (
-                            <span className="mt-0.5 block text-[9px] font-medium text-gray-900">
-                              指導者：{summary.coachAttend}
-                              <br />
-                              選手：{summary.playerAttend}
+                            <span className="mt-0.5 block whitespace-nowrap text-[8px] font-medium leading-tight tracking-[-0.08em] text-gray-900">
+                              指導者:{summary.coachAttend} 選手:
+                              {summary.playerAttend}
                             </span>
                           )}
 
@@ -576,12 +574,6 @@ export default function UserCalendarClient({
                               )}`}
                             >
                               {statusCalendarLabel(currentStatus)}
-                            </span>
-                          )}
-
-                          {!event.attendance_required && (
-                            <span className="mt-1 block rounded bg-gray-100 px-1 py-0.5 text-[9px] font-bold text-gray-700">
-                              出欠不要
                             </span>
                           )}
                         </button>
@@ -612,11 +604,11 @@ export default function UserCalendarClient({
                             clickEvent.stopPropagation();
                             openEventModal(cell.dateKey, event.id);
                           }}
-                          className="block w-full rounded bg-teal-500 px-[1px] py-1 text-center font-bold leading-tight text-white"
+                          className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
                         >
                           <span
-                            className={`block ${compactFontClass(event.title)}`}
-                            style={compactStyle(event.title, "#ffffff")}
+                            className="block font-bold"
+                            style={calendarTextStyle(event.title, "#ffffff")}
                           >
                             {displayText(event.title)}
                           </span>
