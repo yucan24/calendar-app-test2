@@ -289,9 +289,7 @@ export default function UserCalendarClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
-  const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
-    null
-  );
+  const longPressTimerRef = useRef<number | null>(null);
 
   const pointerStateRef = useRef({
     down: false,
