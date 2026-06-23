@@ -737,223 +737,183 @@ export default function UserCalendarClient({
             </p>
           )}
 
-          <div className="mt-4 grid grid-cols-7 border-l border-t text-center text-sm font-bold">
-            {WEEKDAYS.map((day) => (
-              <div
-                key={day.label}
-                className={
-                  day.value === 6
-                    ? "border-b border-r border-gray-300 bg-blue-100 p-1 text-blue-900"
-                    : day.value === 0
-                      ? "border-b border-r border-gray-300 bg-red-100 p-1 text-red-900"
-                      : "border-b border-r border-gray-300 bg-gray-100 p-1 text-gray-900"
-                }
-              >
-                {day.label}
-              </div>
-            ))}
-          </div>
+          <div className="mt-4 overflow-hidden border border-gray-300 bg-gray-300">
+            <div className="grid grid-cols-7 gap-px text-center text-sm font-bold">
+              {WEEKDAYS.map((day) => (
+                <div
+                  key={day.label}
+                  className={
+                    day.value === 6
+                      ? "bg-blue-100 p-1 text-blue-900"
+                      : day.value === 0
+                        ? "bg-red-100 p-1 text-red-900"
+                        : "bg-gray-100 p-1 text-gray-900"
+                  }
+                >
+                  {day.label}
+                </div>
+              ))}
+            </div>
 
-          <div
-            className={
-              isSelecting
-                ? "grid touch-none select-none grid-cols-7 border-l border-gray-300 text-center"
-                : "grid touch-pan-y select-none grid-cols-7 border-l border-gray-300 text-center"
-            }
-            onPointerMove={handleCalendarPointerMove}
-            onPointerUp={handleCalendarPointerUp}
-            onPointerCancel={handleCalendarPointerCancel}
-          >
-            {monthCells.map((cell, index) => {
-              if (!cell) {
-                return (
-                  <div
-                    key={`empty-${index}`}
-                    className="min-h-[112px] border-b border-r border-gray-300 bg-gray-50"
-                  />
-                );
+            <div
+              className={
+                isSelecting
+                  ? "mt-px grid touch-none select-none grid-cols-7 gap-px text-center"
+                  : "mt-px grid touch-pan-y select-none grid-cols-7 gap-px text-center"
               }
+              onPointerMove={handleCalendarPointerMove}
+              onPointerUp={handleCalendarPointerUp}
+              onPointerCancel={handleCalendarPointerCancel}
+            >
+              {monthCells.map((cell, index) => {
+                if (!cell) {
+                  return (
+                    <div
+                      key={`empty-${index}`}
+                      className="min-h-[112px] bg-gray-50"
+                    />
+                  );
+                }
 
-              const dayEvents = eventsByDate[cell.dateKey] ?? [];
+                const dayEvents = eventsByDate[cell.dateKey] ?? [];
 
-              const normalEvents = dayEvents.filter(
-                (event) => event.display_type !== "period"
-              );
+                const normalEvents = dayEvents.filter(
+                  (event) => event.display_type !== "period"
+                );
 
-              const periodEvents = dayEvents.filter(
-                (event) => event.display_type === "period"
-              );
+                const periodEvents = dayEvents.filter(
+                  (event) => event.display_type === "period"
+                );
 
-              const hasHolidayEvent = dayEvents.some(
-                (event) => event.is_holiday
-              );
+                const hasHolidayEvent = dayEvents.some(
+                  (event) => event.is_holiday
+                );
 
-              const isDraggingSelected = dragDateKeys.includes(cell.dateKey);
+                const isDraggingSelected = dragDateKeys.includes(cell.dateKey);
 
-              const baseCellClass =
-                "min-h-[112px] cursor-pointer border-b border-r border-gray-300 p-1 text-center active:bg-yellow-100 sm:min-h-36";
+                const baseCellClass =
+                  "relative min-h-[112px] cursor-pointer p-1 text-center active:bg-yellow-100 sm:min-h-36";
 
-              const cellClass =
-                isDraggingSelected
-                  ? `${baseCellClass} bg-yellow-100 ring-2 ring-yellow-400`
-                  : hasHolidayEvent || cell.weekday === 0
+                const cellClass =
+                  hasHolidayEvent || cell.weekday === 0
                     ? `${baseCellClass} bg-red-50`
                     : cell.weekday === 6
                       ? `${baseCellClass} bg-blue-50`
                       : `${baseCellClass} bg-white`;
 
-              return (
-                <div
-                  key={cell.dateKey}
-                  role="button"
-                  tabIndex={0}
-                  data-calendar-date-key={cell.dateKey}
-                  className={cellClass}
-                  onPointerDown={(event) =>
-                    handlePointerDown(event, cell.dateKey)
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      openDayModal(cell.dateKey);
+                return (
+                  <div
+                    key={cell.dateKey}
+                    role="button"
+                    tabIndex={0}
+                    data-calendar-date-key={cell.dateKey}
+                    className={cellClass}
+                    style={
+                      isDraggingSelected
+                        ? {
+                            boxShadow: "inset 0 0 0 2px #facc15",
+                            backgroundColor: "#fef9c3",
+                          }
+                        : undefined
                     }
-                  }}
-                >
-                  <div className="flex justify-center">
-                    <span
-                      className={
-                        todayKey === cell.dateKey
-                          ? "flex h-7 w-7 items-center justify-center rounded-full bg-black text-base font-bold text-white"
-                          : "flex h-7 w-7 items-center justify-center text-base font-bold text-gray-900"
+                    onPointerDown={(event) =>
+                      handlePointerDown(event, cell.dateKey)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        openDayModal(cell.dateKey);
                       }
-                    >
-                      {cell.day}
-                    </span>
-                  </div>
-
-                  <div className="mt-1 space-y-1">
-                    {normalEvents.slice(0, 2).map((event) => {
-                      const summary = summariesByEvent[event.id];
-                      const currentStatus = localResponses[event.id] ?? "";
-
-                      return (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onPointerDown={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onPointerUp={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onClick={(clickEvent) => {
-                            clickEvent.stopPropagation();
-                            openEventModal(cell.dateKey, event.id);
-                          }}
-                          className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
-                        >
-                          <span
-                            className="block font-bold"
-                            style={calendarTextStyle(
-                              event.title,
-                              event.title_color
-                            )}
-                          >
-                            {displayText(event.title)}
-                          </span>
-
-                          {event.location && (
-                            <span
-                              className="mt-0.5 block"
-                              style={calendarTextStyle(
-                                event.location,
-                                event.location_color
-                              )}
-                            >
-                              {displayText(event.location)}
-                            </span>
-                          )}
-
-                          {event.time_text && (
-                            <span
-                              className="mt-0.5 block"
-                              style={calendarTextStyle(
-                                event.time_text,
-                                event.time_color
-                              )}
-                            >
-                              {displayText(event.time_text)}
-                            </span>
-                          )}
-
-                          {event.attendance_required && summary && (
-                            <span className="mt-0.5 block text-[9px] font-medium leading-tight text-gray-900">
-                              指導者:{summary.coachAttend}
-                              <br />
-                              選手:{summary.playerAttend}
-                            </span>
-                          )}
-
-                          {event.attendance_required && (
-                            <span
-                              className={`mt-1 block rounded px-1 py-0.5 text-[10px] font-bold ${statusPillClass(
-                                currentStatus
-                              )}`}
-                            >
-                              {statusCalendarLabel(currentStatus)}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-
-                    {normalEvents.length > 2 && (
-                      <button
-                        type="button"
-                        onPointerDown={(pointerEvent) =>
-                          pointerEvent.stopPropagation()
+                    }}
+                  >
+                    <div className="flex justify-center">
+                      <span
+                        className={
+                          todayKey === cell.dateKey
+                            ? "flex h-7 w-7 items-center justify-center rounded-full bg-black text-base font-bold text-white"
+                            : "flex h-7 w-7 items-center justify-center text-base font-bold text-gray-900"
                         }
-                        onPointerUp={(pointerEvent) =>
-                          pointerEvent.stopPropagation()
-                        }
-                        onClick={(clickEvent) => {
-                          clickEvent.stopPropagation();
-                          openDayModal(cell.dateKey);
-                        }}
-                        className="block w-full rounded bg-gray-100 px-1 py-0.5 text-[9px] font-bold text-gray-700"
                       >
-                        +{normalEvents.length - 2}件
-                      </button>
-                    )}
-                  </div>
+                        {cell.day}
+                      </span>
+                    </div>
 
-                  {periodEvents.length > 0 && (
-                    <div className="mt-1 space-y-1 border-t border-gray-300 pt-1">
-                      {periodEvents.slice(0, 1).map((event) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onPointerDown={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onPointerUp={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onClick={(clickEvent) => {
-                            clickEvent.stopPropagation();
-                            openEventModal(cell.dateKey, event.id);
-                          }}
-                          className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
-                        >
-                          <span
-                            className="block font-bold"
-                            style={calendarTextStyle(event.title, "#ffffff")}
+                    <div className="mt-1 space-y-1">
+                      {normalEvents.slice(0, 2).map((event) => {
+                        const summary = summariesByEvent[event.id];
+                        const currentStatus = localResponses[event.id] ?? "";
+
+                        return (
+                          <button
+                            key={event.id}
+                            type="button"
+                            onPointerDown={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onPointerUp={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onClick={(clickEvent) => {
+                              clickEvent.stopPropagation();
+                              openEventModal(cell.dateKey, event.id);
+                            }}
+                            className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
                           >
-                            {displayText(event.title)}
-                          </span>
-                        </button>
-                      ))}
+                            <span
+                              className="block font-bold"
+                              style={calendarTextStyle(
+                                event.title,
+                                event.title_color
+                              )}
+                            >
+                              {displayText(event.title)}
+                            </span>
 
-                      {periodEvents.length > 1 && (
+                            {event.location && (
+                              <span
+                                className="mt-0.5 block"
+                                style={calendarTextStyle(
+                                  event.location,
+                                  event.location_color
+                                )}
+                              >
+                                {displayText(event.location)}
+                              </span>
+                            )}
+
+                            {event.time_text && (
+                              <span
+                                className="mt-0.5 block"
+                                style={calendarTextStyle(
+                                  event.time_text,
+                                  event.time_color
+                                )}
+                              >
+                                {displayText(event.time_text)}
+                              </span>
+                            )}
+
+                            {event.attendance_required && summary && (
+                              <span className="mt-0.5 block text-[9px] font-medium leading-tight text-gray-900">
+                                指導者:{summary.coachAttend}
+                                <br />
+                                選手:{summary.playerAttend}
+                              </span>
+                            )}
+
+                            {event.attendance_required && (
+                              <span
+                                className={`mt-1 block rounded px-1 py-0.5 text-[10px] font-bold ${statusPillClass(
+                                  currentStatus
+                                )}`}
+                              >
+                                {statusCalendarLabel(currentStatus)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {normalEvents.length > 2 && (
                         <button
                           type="button"
                           onPointerDown={(pointerEvent) =>
@@ -966,16 +926,64 @@ export default function UserCalendarClient({
                             clickEvent.stopPropagation();
                             openDayModal(cell.dateKey);
                           }}
-                          className="block w-full rounded bg-teal-100 px-1 py-0.5 text-[9px] font-bold text-teal-800"
+                          className="block w-full rounded bg-gray-100 px-1 py-0.5 text-[9px] font-bold text-gray-700"
                         >
-                          +{periodEvents.length - 1}件
+                          +{normalEvents.length - 2}件
                         </button>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {periodEvents.length > 0 && (
+                      <div className="mt-1 space-y-1 border-t border-gray-300 pt-1">
+                        {periodEvents.slice(0, 1).map((event) => (
+                          <button
+                            key={event.id}
+                            type="button"
+                            onPointerDown={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onPointerUp={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onClick={(clickEvent) => {
+                              clickEvent.stopPropagation();
+                              openEventModal(cell.dateKey, event.id);
+                            }}
+                            className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
+                          >
+                            <span
+                              className="block font-bold"
+                              style={calendarTextStyle(event.title, "#ffffff")}
+                            >
+                              {displayText(event.title)}
+                            </span>
+                          </button>
+                        ))}
+
+                        {periodEvents.length > 1 && (
+                          <button
+                            type="button"
+                            onPointerDown={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onPointerUp={(pointerEvent) =>
+                              pointerEvent.stopPropagation()
+                            }
+                            onClick={(clickEvent) => {
+                              clickEvent.stopPropagation();
+                              openDayModal(cell.dateKey);
+                            }}
+                            className="block w-full rounded bg-teal-100 px-1 py-0.5 text-[9px] font-bold text-teal-800"
+                          >
+                            +{periodEvents.length - 1}件
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
 
