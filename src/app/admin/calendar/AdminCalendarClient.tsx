@@ -266,19 +266,6 @@ function calendarTextStyle(
   };
 }
 
-  return {
-    color: color || "#111827",
-    display: "-webkit-box",
-    overflow: "hidden",
-    whiteSpace: "pre-line",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    fontSize: length >= 12 ? "8px" : length >= 8 ? "8.5px" : "9px",
-    lineHeight: "1.1",
-    letterSpacing: length >= 10 ? "-0.08em" : "-0.04em",
-  };
-}
-
 function statusCalendarLabel(status: string | null | undefined) {
   if (status === "attend") return "〇";
   if (status === "pending") return "△";
