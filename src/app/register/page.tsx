@@ -142,12 +142,12 @@ export default async function RegisterPage({ searchParams }: PageProps) {
             />
           </div>
 
-          <Submitbutton 
+          <SubmitButton 
             pendingText="申請中..."
             className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
           >
             登録申請
-          </Submitbutton>
+          </SubmitButton>
 
           <div className="pt-4 text-center">
             <a href="/login" className="text-base font-bold text-gray-800 underline">
