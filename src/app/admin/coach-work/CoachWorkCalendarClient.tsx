@@ -40,14 +40,14 @@ type CalendarEvent = {
   title: string;
   description: string | null;
   location: string | null;
-  time_text: string | null;
   start_at: string;
+  time_text: string | null;
   is_holiday: boolean;
   title_color: string | null;
   location_color: string | null;
   time_color: string | null;
   attendance_required: boolean;
-  display_type: string;
+  display_type: string | null;
 };
 
 type CalendarCell = {
@@ -83,27 +83,11 @@ function makeDateKey(year: number, month: number, day: number) {
   )}`;
 }
 
-function toDateKeyJst(value: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(value));
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
-}
-
 function createCalendarCells(targetMonth: string): CalendarCell[] {
   const [year, month] = targetMonth.split("-").map(Number);
 
   const firstDate = new Date(year, month - 1, 1);
   const lastDate = new Date(year, month, 0);
-
   const firstWeekIndex = (firstDate.getDay() + 6) % 7;
   const daysInMonth = lastDate.getDate();
 
@@ -156,6 +140,21 @@ function createCalendarCells(targetMonth: string): CalendarCell[] {
   return cells;
 }
 
+function getDateKeyFromIso(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     dateStyle: "full",
@@ -163,18 +162,34 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
-function formatHours(minutes: number) {
-  const hours = minutes / 60;
+function formatMinutes(value: number) {
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
 
-  if (Number.isInteger(hours)) {
-    return `${hours}時間`;
-  }
+  if (hours === 0 && minutes === 0) return "0時間";
+  if (minutes === 0) return `${hours}時間`;
+  if (hours === 0) return `${minutes}分`;
 
-  return `${Number(hours.toFixed(1))}時間`;
+  return `${hours}時間${minutes}分`;
 }
 
-function getHourValue(minutes: number) {
-  return Math.round(minutes / 60);
+function formatMinutesShort(value: number) {
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+
+  if (hours === 0 && minutes === 0) return "0h";
+  if (minutes === 0) return `${hours}h`;
+  if (hours === 0) return `${minutes}m`;
+
+  return `${hours}h${minutes}m`;
+}
+
+function getHourPart(value: number) {
+  return Math.floor(value / 60);
+}
+
+function getMinutePart(value: number) {
+  return value % 60;
 }
 
 function getErrorMessage(error: unknown) {
@@ -244,6 +259,9 @@ function calendarTextStyle(
   }
 
   if (!hasLineBreak && length <= 5) {
+    const fontSize = length <= 4 ? "10.2px" : "8.6px";
+    const letterSpacing = length >= 5 ? "-0.14em" : "-0.04em";
+
     return {
       color: color || "#111827",
       display: "block",
@@ -251,9 +269,9 @@ function calendarTextStyle(
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "clip",
-      fontSize: length <= 4 ? "10.2px" : "8.6px",
+      fontSize,
       lineHeight: "1.08",
-      letterSpacing: length >= 5 ? "-0.14em" : "-0.04em",
+      letterSpacing,
       transform: "none",
       transformOrigin: "center",
     };
@@ -328,7 +346,7 @@ export default function CoachWorkCalendarClient({
     const map = new Map<string, CalendarEvent[]>();
 
     for (const event of events) {
-      const dateKey = toDateKeyJst(event.start_at);
+      const dateKey = getDateKeyFromIso(event.start_at);
       const list = map.get(dateKey) ?? [];
       list.push(event);
       map.set(dateKey, list);
@@ -359,6 +377,7 @@ export default function CoachWorkCalendarClient({
 
     for (const log of logs) {
       const summary = map.get(log.coach_id);
+
       if (!summary) continue;
 
       summary.coachingMinutes += log.coaching_minutes;
@@ -484,6 +503,10 @@ export default function CoachWorkCalendarClient({
     setIsSelectionActive(false);
   }
 
+  function handleCalendarPointerCancel() {
+    resetPointerState();
+  }
+
   function handleCreate(formData: FormData) {
     setErrorMessage("");
 
@@ -560,44 +583,68 @@ export default function CoachWorkCalendarClient({
     );
   }
 
-  function renderWorkInputFields(defaultValues?: {
-    coachingMinutes: number;
-    adminMinutes: number;
-    travelExpense: number;
-    otherExpense: number;
-    note: string | null;
-  }) {
+  function renderWorkInputFields() {
     return (
       <>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="min-w-0 rounded border border-gray-300 bg-gray-50 p-4">
-            <label className="block text-sm font-bold text-gray-900">
-              指導時間
-            </label>
-            <input
-              name="coaching_hours"
-              type="number"
-              min={0}
-              defaultValue={
-                defaultValues ? getHourValue(defaultValues.coachingMinutes) : 0
-              }
-              className={fieldClass}
-            />
-          </div>
+        <div className="rounded border border-gray-300 bg-gray-50 p-4">
+          <p className="font-bold text-gray-900">指導時間</p>
 
-          <div className="min-w-0 rounded border border-gray-300 bg-gray-50 p-4">
-            <label className="block text-sm font-bold text-gray-900">
-              事務時間
-            </label>
-            <input
-              name="admin_hours"
-              type="number"
-              min={0}
-              defaultValue={
-                defaultValues ? getHourValue(defaultValues.adminMinutes) : 0
-              }
-              className={fieldClass}
-            />
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">
+                時間
+              </label>
+              <input
+                name="coaching_hours"
+                type="number"
+                min={0}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">分</label>
+              <input
+                name="coaching_minutes"
+                type="number"
+                min={0}
+                max={59}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded border border-gray-300 bg-gray-50 p-4">
+          <p className="font-bold text-gray-900">事務作業時間</p>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">
+                時間
+              </label>
+              <input
+                name="admin_hours"
+                type="number"
+                min={0}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">分</label>
+              <input
+                name="admin_minutes"
+                type="number"
+                min={0}
+                max={59}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
           </div>
         </div>
 
@@ -610,7 +657,7 @@ export default function CoachWorkCalendarClient({
               name="travel_expense"
               type="number"
               min={0}
-              defaultValue={defaultValues?.travelExpense ?? 0}
+              defaultValue={0}
               className={fieldClass}
             />
           </div>
@@ -623,7 +670,7 @@ export default function CoachWorkCalendarClient({
               name="other_expense"
               type="number"
               min={0}
-              defaultValue={defaultValues?.otherExpense ?? 0}
+              defaultValue={0}
               className={fieldClass}
             />
           </div>
@@ -633,12 +680,86 @@ export default function CoachWorkCalendarClient({
           <label className="block text-sm font-bold text-gray-900">備考</label>
           <textarea
             name="note"
-            defaultValue={defaultValues?.note ?? ""}
             className={fieldClass}
             placeholder="例：交通費内訳、立替内容、代理入力など"
           />
         </div>
       </>
+    );
+  }
+
+  function renderEventCard(
+    event: CalendarEvent,
+    coachingTotal: number,
+    adminTotal: number
+  ) {
+    return (
+      <div
+        key={event.id}
+        className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5"
+      >
+        <div style={calendarTextStyle(event.title, event.title_color)}>
+          {displayText(event.title)}
+        </div>
+
+        {event.location && (
+          <div style={calendarTextStyle(event.location, event.location_color)}>
+            {displayText(event.location)}
+          </div>
+        )}
+
+        {event.time_text && (
+          <div style={calendarTextStyle(event.time_text, event.time_color)}>
+            {displayText(event.time_text)}
+          </div>
+        )}
+
+        <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
+          <div>指:{formatMinutesShort(coachingTotal)}</div>
+          <div>事:{formatMinutesShort(adminTotal)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSelectedDayEvents() {
+    if (selectedEvents.length === 0) {
+      return (
+        <p className="mt-2 rounded bg-gray-50 p-3 text-sm font-medium text-gray-700">
+          この日の予定はありません。
+        </p>
+      );
+    }
+
+    return (
+      <div className="mt-3 space-y-2">
+        {selectedEvents.map((event) => (
+          <div
+            key={event.id}
+            className="rounded border border-gray-300 bg-gray-50 p-3"
+          >
+            <p className="font-bold text-gray-900">{event.title}</p>
+
+            {event.location && (
+              <p className="mt-1 text-sm font-medium text-gray-700">
+                会場：{event.location}
+              </p>
+            )}
+
+            {event.time_text && (
+              <p className="mt-1 text-sm font-medium text-gray-700">
+                時間：{event.time_text}
+              </p>
+            )}
+
+            {event.description && (
+              <p className="mt-2 rounded bg-white p-2 text-sm font-medium text-gray-800">
+                {event.description}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -651,7 +772,7 @@ export default function CoachWorkCalendarClient({
               指導者勤怠・立替管理
             </h1>
             <p className="mt-2 text-sm font-medium text-gray-700">
-              予定を見ながら、日付タップで勤怠を入力します。
+              予定を確認しながら、日付タップで勤怠を入力できます。
             </p>
           </div>
 
@@ -704,7 +825,7 @@ export default function CoachWorkCalendarClient({
           className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
-          onPointerCancel={resetPointerState}
+          onPointerCancel={handleCalendarPointerCancel}
           style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
         >
           <div className="grid grid-cols-7 gap-px bg-gray-300">
@@ -715,8 +836,8 @@ export default function CoachWorkCalendarClient({
                   index === 5
                     ? "bg-blue-50 py-2 text-center text-sm font-bold text-blue-700"
                     : index === 6
-                    ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
-                    : "bg-white py-2 text-center text-sm font-bold text-gray-900"
+                      ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
+                      : "bg-white py-2 text-center text-sm font-bold text-gray-900"
                 }
               >
                 {label}
@@ -726,6 +847,13 @@ export default function CoachWorkCalendarClient({
             {cells.map((cell) => {
               const dayLogs = logsByDate.get(cell.dateKey) ?? [];
               const dayEvents = eventsByDate.get(cell.dateKey) ?? [];
+
+              const normalEvents = dayEvents.filter(
+                (event) => event.display_type !== "period"
+              );
+              const periodEvents = dayEvents.filter(
+                (event) => event.display_type === "period"
+              );
 
               const coachingTotal = dayLogs.reduce(
                 (sum, log) => sum + log.coaching_minutes,
@@ -749,8 +877,8 @@ export default function CoachWorkCalendarClient({
                   }
                   className={
                     cell.isCurrentMonth
-                      ? "min-h-28 bg-white p-1 text-left align-top"
-                      : "min-h-28 bg-gray-100 p-1 text-left align-top text-gray-400"
+                      ? "flex min-h-32 flex-col bg-white p-1 text-left align-top"
+                      : "flex min-h-32 flex-col bg-gray-100 p-1 text-left align-top text-gray-400"
                   }
                   style={
                     isSelected
@@ -769,55 +897,35 @@ export default function CoachWorkCalendarClient({
                   </div>
 
                   <div className="mt-1 space-y-1">
-                    {dayEvents.slice(0, 2).map((event) => (
+                    {normalEvents.slice(0, 2).map((event) =>
+                      renderEventCard(event, coachingTotal, adminTotal)
+                    )}
+
+                    {normalEvents.length === 0 && (
+                      <div className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5">
+                        <div className="text-[9px] font-bold leading-tight text-gray-800">
+                          <div>指:{formatMinutesShort(coachingTotal)}</div>
+                          <div>事:{formatMinutesShort(adminTotal)}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {normalEvents.length > 2 && (
+                      <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
+                        他 {normalEvents.length - 2}件
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-auto space-y-1 pt-1">
+                    {periodEvents.slice(0, 1).map((event) => (
                       <div
                         key={event.id}
-                        className={
-                          event.display_type === "period"
-                            ? "rounded bg-teal-50 px-1 py-1"
-                            : "rounded bg-gray-50 px-1 py-1"
-                        }
+                        className="rounded bg-teal-100 px-1 py-0.5 text-[10px] font-bold text-teal-800"
                       >
-                        <div style={calendarTextStyle(event.title, event.title_color)}>
-                          {displayText(event.title)}
-                        </div>
-
-                        {event.location && (
-                          <div
-                            style={calendarTextStyle(
-                              event.location,
-                              event.location_color
-                            )}
-                          >
-                            {displayText(event.location)}
-                          </div>
-                        )}
-
-                        {event.time_text && (
-                          <div
-                            style={calendarTextStyle(
-                              event.time_text,
-                              event.time_color
-                            )}
-                          >
-                            {displayText(event.time_text)}
-                          </div>
-                        )}
+                        {displayText(event.title)}
                       </div>
                     ))}
-
-                    {dayEvents.length > 2 && (
-                      <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
-                        他 {dayEvents.length - 2}件
-                      </div>
-                    )}
-
-                    {(coachingTotal > 0 || adminTotal > 0) && (
-                      <div className="rounded bg-blue-50 px-1 py-1 text-[10px] font-bold leading-tight text-blue-900">
-                        <div>指導 {formatHours(coachingTotal)}</div>
-                        <div>事務 {formatHours(adminTotal)}</div>
-                      </div>
-                    )}
                   </div>
                 </button>
               );
@@ -848,14 +956,14 @@ export default function CoachWorkCalendarClient({
                     <div className="rounded bg-blue-50 p-2">
                       <p className="font-bold text-blue-800">指導時間</p>
                       <p className="font-bold text-blue-900">
-                        {formatHours(coachingMinutes)}
+                        {formatMinutes(coachingMinutes)}
                       </p>
                     </div>
 
                     <div className="rounded bg-purple-50 p-2">
-                      <p className="font-bold text-purple-800">事務時間</p>
+                      <p className="font-bold text-purple-800">事務作業</p>
                       <p className="font-bold text-purple-900">
-                        {formatHours(adminMinutes)}
+                        {formatMinutes(adminMinutes)}
                       </p>
                     </div>
 
@@ -889,7 +997,7 @@ export default function CoachWorkCalendarClient({
                   {formatDate(selectedDateKey)}
                 </h2>
                 <p className="mt-1 text-sm font-medium text-gray-700">
-                  予定を確認して、勤怠・立替を入力します。
+                  予定を確認しながら勤怠を入力します。
                 </p>
               </div>
 
@@ -902,40 +1010,16 @@ export default function CoachWorkCalendarClient({
               </button>
             </div>
 
-            {selectedEvents.length > 0 && (
-              <div className="mt-4 rounded border border-gray-300 bg-gray-50 p-3">
-                <h3 className="font-bold text-gray-900">この日の予定</h3>
-
-                <div className="mt-2 space-y-2">
-                  {selectedEvents.map((event) => (
-                    <div key={event.id} className="rounded bg-white p-3">
-                      <p className="font-bold text-gray-900">{event.title}</p>
-                      {event.location && (
-                        <p className="mt-1 text-sm font-medium text-gray-700">
-                          会場：{event.location}
-                        </p>
-                      )}
-                      {event.time_text && (
-                        <p className="mt-1 text-sm font-medium text-gray-700">
-                          時間：{event.time_text}
-                        </p>
-                      )}
-                      {event.description && (
-                        <p className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-700">
-                          {event.description}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {errorMessage && (
               <div className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
                 {errorMessage}
               </div>
             )}
+
+            <section className="mt-5 rounded border border-gray-300 bg-white p-4">
+              <h3 className="font-bold text-gray-900">この日の予定</h3>
+              {renderSelectedDayEvents()}
+            </section>
 
             <form action={handleCreate} className="mt-5 space-y-4">
               <input type="hidden" name="work_date" value={selectedDateKey} />
@@ -991,14 +1075,14 @@ export default function CoachWorkCalendarClient({
                           <div className="rounded bg-blue-50 p-2">
                             <p className="font-bold text-blue-800">指導</p>
                             <p className="font-bold text-blue-900">
-                              {formatHours(log.coaching_minutes)}
+                              {formatMinutes(log.coaching_minutes)}
                             </p>
                           </div>
 
                           <div className="rounded bg-purple-50 p-2">
                             <p className="font-bold text-purple-800">事務</p>
                             <p className="font-bold text-purple-900">
-                              {formatHours(log.admin_minutes)}
+                              {formatMinutes(log.admin_minutes)}
                             </p>
                           </div>
 
@@ -1038,6 +1122,7 @@ export default function CoachWorkCalendarClient({
                                 name="log_id"
                                 value={log.id}
                               />
+
                               <input
                                 type="hidden"
                                 name="work_date"
@@ -1061,13 +1146,84 @@ export default function CoachWorkCalendarClient({
                                 </select>
                               </div>
 
-                              {renderWorkInputFields({
-                                coachingMinutes: log.coaching_minutes,
-                                adminMinutes: log.admin_minutes,
-                                travelExpense: log.travel_expense,
-                                otherExpense: log.other_expense,
-                                note: log.note,
-                              })}
+                              <div className="rounded border border-gray-300 bg-white p-3">
+                                <p className="font-bold text-gray-900">
+                                  指導時間
+                                </p>
+
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  <input
+                                    name="coaching_hours"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={getHourPart(
+                                      log.coaching_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                  <input
+                                    name="coaching_minutes"
+                                    type="number"
+                                    min={0}
+                                    max={59}
+                                    defaultValue={getMinutePart(
+                                      log.coaching_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="rounded border border-gray-300 bg-white p-3">
+                                <p className="font-bold text-gray-900">
+                                  事務作業時間
+                                </p>
+
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  <input
+                                    name="admin_hours"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={getHourPart(
+                                      log.admin_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                  <input
+                                    name="admin_minutes"
+                                    type="number"
+                                    min={0}
+                                    max={59}
+                                    defaultValue={getMinutePart(
+                                      log.admin_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  name="travel_expense"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={log.travel_expense}
+                                  className={fieldClass}
+                                />
+                                <input
+                                  name="other_expense"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={log.other_expense}
+                                  className={fieldClass}
+                                />
+                              </div>
+
+                              <textarea
+                                name="note"
+                                defaultValue={log.note ?? ""}
+                                className={fieldClass}
+                              />
 
                               <button
                                 disabled={isPending}
@@ -1081,7 +1237,9 @@ export default function CoachWorkCalendarClient({
                           <form
                             action={handleDelete}
                             onSubmit={(event) => {
-                              if (!window.confirm("この勤怠記録を削除しますか？")) {
+                              if (
+                                !window.confirm("この勤怠記録を削除しますか？")
+                              ) {
                                 event.preventDefault();
                               }
                             }}
@@ -1134,9 +1292,20 @@ export default function CoachWorkCalendarClient({
             )}
 
             <div className="mt-4 max-h-28 overflow-y-auto rounded bg-gray-50 p-3 text-sm font-bold text-gray-900">
-              {selectedDateKeyList.map((dateKey) => (
-                <div key={dateKey}>{formatDate(dateKey)}</div>
-              ))}
+              {selectedDateKeyList.map((dateKey) => {
+                const dayEvents = eventsByDate.get(dateKey) ?? [];
+
+                return (
+                  <div key={dateKey} className="border-b border-gray-200 py-2">
+                    <div>{formatDate(dateKey)}</div>
+                    {dayEvents.length > 0 && (
+                      <div className="mt-1 text-xs font-medium text-gray-700">
+                        {dayEvents.map((event) => event.title).join(" / ")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <form action={handleBulkCreate} className="mt-5 space-y-4">
