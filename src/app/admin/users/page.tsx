@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import SubmitButton from "@/components/SubmitButton";
+
 import {
   createBillingItem,
   createTuitionForAllUsers,
@@ -215,9 +217,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               </div>
 
               <div className="flex min-w-0 items-end">
-                <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                <Submitbutton
+                  pendingText="一括作成中..."
+                  className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                >
                   一括作成
-                </button>
+                </Submitbutton>
               </div>
 
               <div className="min-w-0 sm:col-span-3">
@@ -387,9 +392,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       </div>
 
                       <div className="flex min-w-0 items-end">
-                        <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                        <SubmitButton 
+                          pendingText="追加中・・・"
+                          className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                        >
                           追加
-                        </button>
+                        </SubmitButton>
                       </div>
 
                       <div className="min-w-0 sm:col-span-4">
