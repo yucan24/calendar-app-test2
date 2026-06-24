@@ -6,6 +6,7 @@ import type {
 } from "react";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import SubmitButton from "@/components/SubmitButton";
 import {
   createCoachWorkLogs,
   createCoachWorkLogsForDates,
@@ -320,6 +321,7 @@ export default function CoachWorkCalendarClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
+  const actionLockRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
   const pointerDownDateRef = useRef<string | null>(null);
   const didLongPressRef = useRef(false);
@@ -542,10 +544,24 @@ export default function CoachWorkCalendarClient({
     resetPointerState();
   }
 
+  function runLockedAction(action: () => Promise<void>) {
+    if (actionLockRef.current) return;
+
+    actionLockRef.current = true;
+
+    startTransition(async () => {
+      try {
+        await action();
+      } finally {
+        actionLockRef.current = false;
+      }
+    });
+  }
+
   function handleCreate(formData: FormData) {
     setErrorMessage("");
 
-    startTransition(async () => {
+    runLockedAction(async () => {
       try {
         await createCoachWorkLogs(formData);
         closeSingleModal();
@@ -559,7 +575,7 @@ export default function CoachWorkCalendarClient({
   function handleBulkCreate(formData: FormData) {
     setErrorMessage("");
 
-    startTransition(async () => {
+    runLockedAction(async () => {
       try {
         await createCoachWorkLogsForDates(formData);
         closeBulkModal();
@@ -573,7 +589,7 @@ export default function CoachWorkCalendarClient({
   function handleUpdate(formData: FormData) {
     setErrorMessage("");
 
-    startTransition(async () => {
+    runLockedAction(async () => {
       try {
         await updateCoachWorkLog(formData);
         closeSingleModal();
@@ -587,7 +603,7 @@ export default function CoachWorkCalendarClient({
   function handleDelete(formData: FormData) {
     setErrorMessage("");
 
-    startTransition(async () => {
+    runLockedAction(async () => {
       try {
         await deleteCoachWorkLog(formData);
         closeSingleModal();
@@ -714,17 +730,15 @@ export default function CoachWorkCalendarClient({
       <div className="mt-1 space-y-0.5">
         {input.allCoachingTotal > 0 && (
           <div className="rounded bg-blue-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-blue-800">
-            指:{formatHoursShort(input.myCoachingTotal)}
-            <br />(全
-            {formatHoursShort(input.allCoachingTotal)})
+            指:{formatHoursShort(input.myCoachingTotal)}（全
+            {formatHoursShort(input.allCoachingTotal)}）
           </div>
         )}
 
         {input.allAdminTotal > 0 && (
           <div className="rounded bg-purple-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-purple-800">
-            事:{formatHoursShort(input.myAdminTotal)}
-            <br />(全
-            {formatHoursShort(input.allAdminTotal)})
+            事:{formatHoursShort(input.myAdminTotal)}（全
+            {formatHoursShort(input.allAdminTotal)}）
           </div>
         )}
       </div>
@@ -1098,12 +1112,13 @@ export default function CoachWorkCalendarClient({
                 {renderCoachCheckboxes()}
               </details>
 
-              <button
-                disabled={isPending}
-                className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
+              <SubmitButton
+                busy={isPending}
+                pendingText="保存中..."
+                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
               >
                 保存
-              </button>
+              </SubmitButton>
             </form>
 
             <div className="mt-6">
@@ -1267,12 +1282,13 @@ export default function CoachWorkCalendarClient({
                                 className={fieldClass}
                               />
 
-                              <button
-                                disabled={isPending}
-                                className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
+                              <SubmitButton
+                                busy={isPending}
+                                pendingText="修正中..."
+                                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
                               >
                                 修正
-                              </button>
+                              </SubmitButton>
                             </form>
                           </details>
 
@@ -1287,12 +1303,14 @@ export default function CoachWorkCalendarClient({
                             }}
                           >
                             <input type="hidden" name="log_id" value={log.id} />
-                            <button
-                              disabled={isPending}
-                              className="h-full w-full rounded bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+
+                            <SubmitButton
+                              busy={isPending}
+                              pendingText="削除中..."
+                              className="h-full w-full rounded bg-red-600 px-4 py-3 font-bold text-white"
                             >
                               削除
-                            </button>
+                            </SubmitButton>
                           </form>
                         </div>
                       </div>
@@ -1373,12 +1391,13 @@ export default function CoachWorkCalendarClient({
                 {renderCoachCheckboxes()}
               </details>
 
-              <button
-                disabled={isPending}
-                className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
+              <SubmitButton
+                busy={isPending}
+                pendingText="保存中..."
+                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
               >
                 選択日にまとめて保存
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>
