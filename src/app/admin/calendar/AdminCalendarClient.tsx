@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 import {
   updateAdminCalendarAttendance,
   createAdminCalendarEventsForDates,
+  createAdminCalendarEventFromModal,
+  updateAdminCalendarEventFromModal,
 } from "./actions";
 
 type CurrentAdmin = {
@@ -291,6 +293,29 @@ export default function AdminCalendarClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
+  const [newTitle, setNewTitle] = useState("");
+  const [newLocation, setNewLocation] = useState("");
+  const [newTimeText, setNewTimeText] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newAttendanceRequired, setNewAttendanceRequired] = useState(true);
+  const [newIsPeriod, setNewIsPeriod] = useState(false);
+  const [newIsHoliday, setNewIsHoliday] = useState(false);
+  const [newTitleColor, setNewTitleColor] = useState("#111827");
+  const [newLocationColor, setNewLocationColor] = useState("#111827");
+  const [newTimeColor, setNewTimeColor] = useState("#111827");
+
+  const [editDateKey, setEditDateKey] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editTimeText, setEditTimeText] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editAttendanceRequired, setEditAttendanceRequired] = useState(true);
+  const [editIsPeriod, setEditIsPeriod] = useState(false);
+  const [editIsHoliday, setEditIsHoliday] = useState(false);
+  const [editTitleColor, setEditTitleColor] = useState("#111827");
+  const [editLocationColor, setEditLocationColor] = useState("#111827");
+  const [editTimeColor, setEditTimeColor] = useState("#111827");
+
   const [bulkCreateTitle, setBulkCreateTitle] = useState("");
   const [bulkCreateLocation, setBulkCreateLocation] = useState("");
   const [bulkCreateTimeText, setBulkCreateTimeText] = useState("");
@@ -391,6 +416,22 @@ export default function AdminCalendarClient({
       ? events.find((event) => event.id === selectedEventId) ?? null
       : null;
 
+  useEffect(() => {
+    if (!selectedEvent) return;
+
+    setEditDateKey(getEventDateKey(selectedEvent.start_at));
+    setEditTitle(selectedEvent.title);
+    setEditLocation(selectedEvent.location ?? "");
+    setEditTimeText(selectedEvent.time_text ?? "");
+    setEditDescription(selectedEvent.description ?? "");
+    setEditAttendanceRequired(selectedEvent.attendance_required);
+    setEditIsPeriod(selectedEvent.display_type === "period");
+    setEditIsHoliday(selectedEvent.is_holiday);
+    setEditTitleColor(selectedEvent.title_color || "#111827");
+    setEditLocationColor(selectedEvent.location_color || "#111827");
+    setEditTimeColor(selectedEvent.time_color || "#111827");
+  }, [selectedEvent?.id]);
+
   const bulkEvents = useMemo(() => {
     return uniqueSortedDateKeys(bulkDateKeys).flatMap((dateKey) => {
       const dayEvents = eventsByDate[dateKey] ?? [];
@@ -408,6 +449,19 @@ export default function AdminCalendarClient({
 
   const prev = getPrevMonth(currentYear, currentMonth);
   const next = getNextMonth(currentYear, currentMonth);
+
+  function resetNewEventForm() {
+    setNewTitle("");
+    setNewLocation("");
+    setNewTimeText("");
+    setNewDescription("");
+    setNewAttendanceRequired(true);
+    setNewIsPeriod(false);
+    setNewIsHoliday(false);
+    setNewTitleColor("#111827");
+    setNewLocationColor("#111827");
+    setNewTimeColor("#111827");
+  }
 
   function setDragKeys(dateKeys: string[]) {
     const next = uniqueSortedDateKeys(dateKeys);
@@ -514,6 +568,78 @@ export default function AdminCalendarClient({
         router.refresh();
       } catch {
         setErrorMessage("保存に失敗しました。通信状態を確認してください。");
+      }
+    });
+  }
+
+  function saveSingleCreateEvent() {
+    if (!selectedDateKey) return;
+
+    setErrorMessage("");
+    setSaveMessage("");
+
+    if (!newTitle.trim()) {
+      setErrorMessage("予定名を入力してください。");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await createAdminCalendarEventFromModal({
+          dateKey: selectedDateKey,
+          title: newTitle,
+          description: newDescription,
+          location: newLocation,
+          timeText: newTimeText,
+          isHoliday: newIsHoliday,
+          attendanceRequired: newAttendanceRequired,
+          isPeriod: newIsPeriod,
+          titleColor: newTitleColor,
+          locationColor: newLocationColor,
+          timeColor: newTimeColor,
+        });
+
+        setSaveMessage("予定を登録しました。");
+        resetNewEventForm();
+        router.refresh();
+      } catch {
+        setErrorMessage("予定登録に失敗しました。");
+      }
+    });
+  }
+
+  function saveSelectedEventEdit() {
+    if (!selectedEvent) return;
+
+    setErrorMessage("");
+    setSaveMessage("");
+
+    if (!editTitle.trim()) {
+      setErrorMessage("予定名を入力してください。");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await updateAdminCalendarEventFromModal({
+          eventId: selectedEvent.id,
+          dateKey: editDateKey,
+          title: editTitle,
+          description: editDescription,
+          location: editLocation,
+          timeText: editTimeText,
+          isHoliday: editIsHoliday,
+          attendanceRequired: editAttendanceRequired,
+          isPeriod: editIsPeriod,
+          titleColor: editTitleColor,
+          locationColor: editLocationColor,
+          timeColor: editTimeColor,
+        });
+
+        setSaveMessage("予定を更新しました。");
+        router.refresh();
+      } catch {
+        setErrorMessage("予定更新に失敗しました。");
       }
     });
   }
@@ -823,11 +949,9 @@ export default function AdminCalendarClient({
               }
 
               const dayEvents = eventsByDate[cell.dateKey] ?? [];
-
               const normalEvents = dayEvents.filter(
                 (event) => event.display_type !== "period"
               );
-
               const periodEvents = dayEvents.filter(
                 (event) => event.display_type === "period"
               );
@@ -1038,31 +1162,9 @@ export default function AdminCalendarClient({
         <h2 className="text-lg font-bold">操作方法</h2>
 
         <p className="mt-2 text-sm text-gray-700">
-          日付タイルまたは予定をタップすると、詳細モーダルが開きます。
+          日付タイルをタップすると予定登録、予定をタップすると予定編集をモーダル内で行えます。
           複数日を選ぶ場合は、日付を長押ししてからドラッグしてください。
         </p>
-
-        <p className="mt-2 text-sm text-gray-700">
-          複数日選択後のモーダルから、まとめて出欠回答と、まとめて予定登録ができます。
-        </p>
-
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          <span className="rounded bg-green-100 px-3 py-1 text-green-800">
-            〇 出席
-          </span>
-          <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-800">
-            △ 未定
-          </span>
-          <span className="rounded bg-red-100 px-3 py-1 text-red-800">
-            × 欠席
-          </span>
-          <span className="rounded bg-orange-100 px-3 py-1 text-orange-800">
-            未 未回答
-          </span>
-          <span className="rounded bg-teal-100 px-3 py-1 text-teal-800">
-            期間予定
-          </span>
-        </div>
       </section>
 
       {bulkDateKeys.length > 0 && (
@@ -1106,18 +1208,10 @@ export default function AdminCalendarClient({
                   </button>
                 ))}
               </div>
-
-              <p className="mt-2 text-xs text-gray-500">
-                不要な日付はタップすると選択から外せます。
-              </p>
             </div>
 
             <section className="mt-5 rounded border bg-white p-4">
               <h3 className="text-lg font-bold">選択日の予定にまとめて出欠回答</h3>
-
-              <p className="mt-2 text-sm text-gray-600">
-                出欠回答が必要な予定だけが保存対象です。
-              </p>
 
               <div className="mt-4 space-y-3">
                 {bulkEvents.length === 0 ? (
@@ -1140,12 +1234,6 @@ export default function AdminCalendarClient({
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <p className="font-bold">{event.title}</p>
 
-                          {event.display_type === "period" && (
-                            <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                              期間予定
-                            </span>
-                          )}
-
                           {!event.attendance_required && (
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
                               出欠不要
@@ -1162,18 +1250,6 @@ export default function AdminCalendarClient({
                             </span>
                           )}
                         </div>
-
-                        {event.time_text && (
-                          <p className="mt-1 text-sm text-gray-700">
-                            時間：{event.time_text}
-                          </p>
-                        )}
-
-                        {event.location && (
-                          <p className="mt-1 text-sm text-gray-700">
-                            場所：{event.location}
-                          </p>
-                        )}
                       </div>
                     );
                   })
@@ -1203,10 +1279,6 @@ export default function AdminCalendarClient({
 
             <section className="mt-5 rounded border bg-white p-4">
               <h3 className="text-lg font-bold">選択日にまとめて予定登録</h3>
-
-              <p className="mt-2 text-sm text-gray-600">
-                選択中の {bulkDateKeys.length} 日に、同じ予定を追加登録します。
-              </p>
 
               <div className="mt-4 space-y-3">
                 <div>
@@ -1335,7 +1407,9 @@ export default function AdminCalendarClient({
                 <p className="text-sm text-gray-600">
                   {formatDateLabel(selectedDateKey)}
                 </p>
-                <h2 className="mt-1 text-xl font-bold">予定詳細</h2>
+                <h2 className="mt-1 text-xl font-bold">
+                  {selectedEvent ? "予定編集" : "予定登録"}
+                </h2>
               </div>
 
               <button
@@ -1348,16 +1422,7 @@ export default function AdminCalendarClient({
             </div>
 
             <div className="mt-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-bold">この日の予定</p>
-
-                <a
-                  href={`/admin/calendar?year=${currentYear}&month=${currentMonth}&date=${selectedDateKey}#event-form`}
-                  className="rounded bg-black px-3 py-2 text-xs font-bold text-white"
-                >
-                  この日付で予定登録
-                </a>
-              </div>
+              <p className="text-sm font-bold">この日の予定</p>
 
               {selectedDateEvents.length === 0 ? (
                 <p className="mt-2 rounded bg-gray-50 p-3 text-sm text-gray-600">
@@ -1396,172 +1461,298 @@ export default function AdminCalendarClient({
                           </span>
                         )}
                       </div>
-
-                      {event.time_text && (
-                        <p
-                          className="mt-1 text-sm"
-                          style={{ color: event.time_color || "#111827" }}
-                        >
-                          時間：{event.time_text}
-                        </p>
-                      )}
-
-                      {event.location && (
-                        <p
-                          className="mt-1 text-sm"
-                          style={{ color: event.location_color || "#111827" }}
-                        >
-                          場所：{event.location}
-                        </p>
-                      )}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {selectedEvent && (
+            <section className="mt-5 rounded-lg border bg-white p-4">
+              <h3 className="text-lg font-bold">
+                {selectedEvent ? "予定を編集" : "この日付に予定を登録"}
+              </h3>
+
+              <div className="mt-4 space-y-3">
+                {selectedEvent && (
+                  <div>
+                    <label className="block text-sm font-medium">日付</label>
+                    <input
+                      type="date"
+                      value={editDateKey}
+                      onChange={(event) => setEditDateKey(event.target.value)}
+                      className="mt-1 w-full rounded border px-3 py-2"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium">予定名</label>
+                  <input
+                    value={selectedEvent ? editTitle : newTitle}
+                    onChange={(event) =>
+                      selectedEvent
+                        ? setEditTitle(event.target.value)
+                        : setNewTitle(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：通常練習 / 試合 / テスト期間"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">場所</label>
+                  <input
+                    value={selectedEvent ? editLocation : newLocation}
+                    onChange={(event) =>
+                      selectedEvent
+                        ? setEditLocation(event.target.value)
+                        : setNewLocation(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：第一体育館"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">時間</label>
+                  <input
+                    value={selectedEvent ? editTimeText : newTimeText}
+                    onChange={(event) =>
+                      selectedEvent
+                        ? setEditTimeText(event.target.value)
+                        : setNewTimeText(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：AM / PM / 終日 / 9:00-12:00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">内容</label>
+                  <textarea
+                    value={selectedEvent ? editDescription : newDescription}
+                    onChange={(event) =>
+                      selectedEvent
+                        ? setEditDescription(event.target.value)
+                        : setNewDescription(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="持ち物、補足など"
+                  />
+                </div>
+
+                <details className="rounded bg-gray-50 p-3">
+                  <summary className="cursor-pointer text-sm font-bold">
+                    詳細設定
+                  </summary>
+
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedEvent
+                            ? editAttendanceRequired
+                            : newAttendanceRequired
+                        }
+                        onChange={(event) =>
+                          selectedEvent
+                            ? setEditAttendanceRequired(event.target.checked)
+                            : setNewAttendanceRequired(event.target.checked)
+                        }
+                        disabled={selectedEvent ? editIsPeriod : newIsPeriod}
+                      />
+                      出欠回答を必要にする
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedEvent ? editIsPeriod : newIsPeriod}
+                        onChange={(event) => {
+                          if (selectedEvent) {
+                            setEditIsPeriod(event.target.checked);
+                            if (event.target.checked) {
+                              setEditAttendanceRequired(false);
+                            }
+                          } else {
+                            setNewIsPeriod(event.target.checked);
+                            if (event.target.checked) {
+                              setNewAttendanceRequired(false);
+                            }
+                          }
+                        }}
+                      />
+                      期間予定として下部に表示する
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedEvent ? editIsHoliday : newIsHoliday}
+                        onChange={(event) =>
+                          selectedEvent
+                            ? setEditIsHoliday(event.target.checked)
+                            : setNewIsHoliday(event.target.checked)
+                        }
+                      />
+                      祝日扱いにする
+                    </label>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                        <span>予定</span>
+                        <input
+                          type="color"
+                          value={selectedEvent ? editTitleColor : newTitleColor}
+                          onChange={(event) =>
+                            selectedEvent
+                              ? setEditTitleColor(event.target.value)
+                              : setNewTitleColor(event.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                        <span>場所</span>
+                        <input
+                          type="color"
+                          value={
+                            selectedEvent ? editLocationColor : newLocationColor
+                          }
+                          onChange={(event) =>
+                            selectedEvent
+                              ? setEditLocationColor(event.target.value)
+                              : setNewLocationColor(event.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                        <span>時間</span>
+                        <input
+                          type="color"
+                          value={selectedEvent ? editTimeColor : newTimeColor}
+                          onChange={(event) =>
+                            selectedEvent
+                              ? setEditTimeColor(event.target.value)
+                              : setNewTimeColor(event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </details>
+
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={
+                    selectedEvent ? saveSelectedEventEdit : saveSingleCreateEvent
+                  }
+                  className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-40"
+                >
+                  {selectedEvent ? "予定を更新" : "予定を登録"}
+                </button>
+              </div>
+            </section>
+
+            {selectedEvent && selectedEvent.attendance_required && (
               <section className="mt-5 rounded-lg border bg-white p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3
-                    className="text-xl font-bold"
-                    style={{ color: selectedEvent.title_color || "#111827" }}
-                  >
-                    {selectedEvent.title}
-                  </h3>
+                <h3 className="text-lg font-bold">自分の出欠回答</h3>
 
-                  {selectedEvent.is_holiday && (
-                    <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">
-                      祝日扱い
-                    </span>
-                  )}
+                <p className="mt-2 text-sm font-bold">
+                  現在の回答：
+                  {statusLongLabel(localResponses[selectedEvent.id] ?? "")}
+                </p>
 
-                  {selectedEvent.display_type === "period" && (
-                    <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                      期間予定
-                    </span>
-                  )}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {STATUS_OPTIONS.map((option) => {
+                    const currentStatus = localResponses[selectedEvent.id] ?? "";
 
-                  {!selectedEvent.attendance_required && (
-                    <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                      出欠不要
-                    </span>
-                  )}
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={isPending}
+                        onClick={() =>
+                          saveAttendance(selectedEvent.id, option.value)
+                        }
+                        className={`rounded border px-3 py-3 text-sm font-bold ${statusButtonClass(
+                          option.value,
+                          currentStatus
+                        )}`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="mt-3 space-y-1 text-sm">
-                  <p style={{ color: selectedEvent.location_color || "#111827" }}>
-                    場所：{selectedEvent.location || "未設定"}
-                  </p>
+                <div className="mt-4 rounded bg-gray-50 p-3 text-sm">
+                  <p className="font-bold">集計</p>
 
-                  <p style={{ color: selectedEvent.time_color || "#111827" }}>
-                    時間：{selectedEvent.time_text || "未設定"}
-                  </p>
-                </div>
-
-                {selectedEvent.description && (
-                  <p className="mt-3 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm text-gray-700">
-                    {selectedEvent.description}
-                  </p>
-                )}
-
-                <div className="mt-4">
-                  <a
-                    href={`/admin/calendar/${selectedEvent.id}`}
-                    className="inline-block rounded border bg-white px-4 py-2 text-sm font-bold"
-                  >
-                    詳細・編集画面を開く
-                  </a>
-                </div>
-
-                {selectedEvent.attendance_required ? (
-                  <>
-                    <div className="mt-4 rounded bg-gray-50 p-3 text-sm">
-                      <p className="font-bold">集計</p>
-
-                      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                        <div className="rounded bg-green-100 p-2 text-green-800">
-                          <p className="text-xs">出席</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.attend ?? 0}
-                          </p>
-                        </div>
-
-                        <div className="rounded bg-yellow-100 p-2 text-yellow-800">
-                          <p className="text-xs">未定</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.pending ?? 0}
-                          </p>
-                        </div>
-
-                        <div className="rounded bg-red-100 p-2 text-red-800">
-                          <p className="text-xs">欠席</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.absent ?? 0}
-                          </p>
-                        </div>
-                      </div>
-
-                      <p className="mt-2 text-center text-sm text-gray-700">
-                        指導者：
-                        {summariesByEvent[selectedEvent.id]?.coachAttend ?? 0}
-                        　選手：
-                        {summariesByEvent[selectedEvent.id]?.playerAttend ?? 0}
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded bg-green-100 p-2 text-green-800">
+                      <p className="text-xs">出席</p>
+                      <p className="text-lg font-bold">
+                        {summariesByEvent[selectedEvent.id]?.attend ?? 0}
                       </p>
                     </div>
 
-                    <div className="mt-4">
-                      <p className="text-sm font-bold">
-                        自分の回答：
-                        {statusLongLabel(localResponses[selectedEvent.id] ?? "")}
+                    <div className="rounded bg-yellow-100 p-2 text-yellow-800">
+                      <p className="text-xs">未定</p>
+                      <p className="text-lg font-bold">
+                        {summariesByEvent[selectedEvent.id]?.pending ?? 0}
                       </p>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {STATUS_OPTIONS.map((option) => {
-                          const currentStatus =
-                            localResponses[selectedEvent.id] ?? "";
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              disabled={isPending}
-                              onClick={() =>
-                                saveAttendance(selectedEvent.id, option.value)
-                              }
-                              className={`rounded border px-3 py-3 text-sm font-bold ${statusButtonClass(
-                                option.value,
-                                currentStatus
-                              )}`}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-3 min-h-5 text-sm">
-                        {isPending && (
-                          <span className="text-gray-600">保存中...</span>
-                        )}
-
-                        {!isPending && saveMessage && (
-                          <span className="text-green-700">{saveMessage}</span>
-                        )}
-
-                        {!isPending && errorMessage && (
-                          <span className="text-red-600">{errorMessage}</span>
-                        )}
-                      </div>
                     </div>
-                  </>
-                ) : (
-                  <p className="mt-4 rounded bg-gray-50 p-3 text-sm text-gray-600">
-                    この予定は出欠回答不要です。
+
+                    <div className="rounded bg-red-100 p-2 text-red-800">
+                      <p className="text-xs">欠席</p>
+                      <p className="text-lg font-bold">
+                        {summariesByEvent[selectedEvent.id]?.absent ?? 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-center text-sm text-gray-700">
+                    指導者：
+                    {summariesByEvent[selectedEvent.id]?.coachAttend ?? 0}
+                    　選手：
+                    {summariesByEvent[selectedEvent.id]?.playerAttend ?? 0}
                   </p>
-                )}
+                </div>
               </section>
             )}
+
+            {selectedEvent && !selectedEvent.attendance_required && (
+              <p className="mt-5 rounded bg-gray-50 p-3 text-sm text-gray-600">
+                この予定は出欠回答不要です。
+              </p>
+            )}
+
+            {selectedEvent && (
+              <div className="mt-5">
+                <a
+                  href={`/admin/calendar/${selectedEvent.id}`}
+                  className="inline-block rounded border bg-white px-4 py-2 text-sm font-bold"
+                >
+                  詳細画面を開く
+                </a>
+              </div>
+            )}
+
+            <div className="mt-4 min-h-5 text-sm">
+              {isPending && <span className="text-gray-600">保存中...</span>}
+
+              {!isPending && saveMessage && (
+                <span className="text-green-700">{saveMessage}</span>
+              )}
+
+              {!isPending && errorMessage && (
+                <span className="text-red-600">{errorMessage}</span>
+              )}
+            </div>
           </div>
         </div>
       )}
