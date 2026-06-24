@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import SubmitButton from "@/components/SubmitButton";
+
 import {
   updateMemberLoginEnabled,
   updateMemberProfile,
@@ -197,9 +199,12 @@ export default async function AdminMembersPage() {
                       </div>
 
                       <div className="sm:col-span-3">
-                        <button className="rounded bg-black px-4 py-3 font-bold text-white">
+                        <SubmitButton
+                          pendingText="更新中・・・"
+                          className="rounded bg-black px-4 py-3 font-bold text-white">
+                        >
                           登録情報を更新
-                        </button>
+                        </SubmitButton>
                       </div>
                     </form>
                   </details>
@@ -214,12 +219,13 @@ export default async function AdminMembersPage() {
                         <form action={updateMemberRole}>
                           <input type="hidden" name="member_id" value={member.id} />
                           <input type="hidden" name="role" value="user" />
-                          <button
+                          <SubmitButton
                             disabled={isSelf}
+                            pendingTsxt="処理中・・・"
                             className="w-full rounded bg-gray-700 px-4 py-3 font-bold text-white disabled:opacity-40"
                           >
                             管理者権限を削除
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : (
                         <form action={updateMemberRole}>
