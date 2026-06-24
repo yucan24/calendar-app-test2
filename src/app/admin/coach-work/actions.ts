@@ -18,7 +18,6 @@ function parseNonNegativeInteger(
   label: string
 ) {
   const text = String(value ?? "").trim();
-
   if (!text) return 0;
 
   const number = Number(text);
@@ -30,23 +29,13 @@ function parseNonNegativeInteger(
   return number;
 }
 
-function parseMinutes(
+function parseHoursToMinutes(
   formData: FormData,
-  hourName: string,
-  minuteName: string,
+  fieldName: string,
   label: string
 ) {
-  const hours = parseNonNegativeInteger(formData.get(hourName), `${label}の時間`);
-  const minutes = parseNonNegativeInteger(
-    formData.get(minuteName),
-    `${label}の分`
-  );
-
-  if (minutes >= 60) {
-    throw new Error(`${label}の分は0〜59で入力してください`);
-  }
-
-  return hours * 60 + minutes;
+  const hours = parseNonNegativeInteger(formData.get(fieldName), label);
+  return hours * 60;
 }
 
 function getCoachIds(formData: FormData) {
@@ -120,7 +109,6 @@ async function insertCoachWorkRows(input: {
   dateKeys: string[];
 }) {
   const admin = await requireAdmin();
-
   const dateKeys = input.dateKeys;
 
   if (dateKeys.length === 0) {
@@ -136,17 +124,15 @@ async function insertCoachWorkRows(input: {
   const coachIds = getCoachIds(input.formData);
   await assertCoachIdsInAdminGroup(coachIds, admin.group_id);
 
-  const coachingMinutes = parseMinutes(
+  const coachingMinutes = parseHoursToMinutes(
     input.formData,
     "coaching_hours",
-    "coaching_minutes",
     "指導時間"
   );
 
-  const adminMinutes = parseMinutes(
+  const adminMinutes = parseHoursToMinutes(
     input.formData,
     "admin_hours",
-    "admin_minutes",
     "事務作業時間"
   );
 
@@ -228,17 +214,15 @@ export async function updateCoachWorkLog(formData: FormData) {
   await assertCoachWorkLogInAdminGroup(logId, admin.group_id);
   await assertCoachIdsInAdminGroup([coachId], admin.group_id);
 
-  const coachingMinutes = parseMinutes(
+  const coachingMinutes = parseHoursToMinutes(
     formData,
     "coaching_hours",
-    "coaching_minutes",
     "指導時間"
   );
 
-  const adminMinutes = parseMinutes(
+  const adminMinutes = parseHoursToMinutes(
     formData,
     "admin_hours",
-    "admin_minutes",
     "事務作業時間"
   );
 

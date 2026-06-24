@@ -18,6 +18,10 @@ function getMonthStartDate(targetMonth: string) {
   return `${targetMonth}-01`;
 }
 
+function toUtcIsoFromDateKey(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
+}
+
 function getTodayDateKey() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
@@ -77,6 +81,20 @@ export default async function AdminCoachWorkPage({ searchParams }: PageProps) {
     throw new Error(logsError.message);
   }
 
+  const { data: events, error: eventsError } = await supabase
+    .from("calendar_events")
+    .select(
+      "id, title, description, location, time_text, start_at, is_holiday, title_color, location_color, time_color, attendance_required, display_type"
+    )
+    .eq("group_id", admin.group_id)
+    .gte("start_at", toUtcIsoFromDateKey(monthStart))
+    .lt("start_at", toUtcIsoFromDateKey(monthEnd))
+    .order("start_at", { ascending: true });
+
+  if (eventsError) {
+    throw new Error(eventsError.message);
+  }
+
   return (
     <CoachWorkCalendarClient
       currentAdmin={{
@@ -90,6 +108,7 @@ export default async function AdminCoachWorkPage({ searchParams }: PageProps) {
       todayKey={getTodayDateKey()}
       coaches={coaches ?? []}
       logs={logs ?? []}
+      events={events ?? []}
     />
   );
 }
