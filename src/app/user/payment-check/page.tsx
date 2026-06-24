@@ -13,7 +13,6 @@ type BillingItem = {
   category: string;
   title: string;
   amount: number;
-  due_date: string | null;
   note: string | null;
 };
 
@@ -31,7 +30,7 @@ export default async function UserPaymentCheckPage() {
 
   const { data: unpaidItems, error } = await supabase
     .from("billing_items")
-    .select("id, target_month, category, title, amount, due_date, note")
+    .select("id, target_month, category, title, amount, note")
     .eq("group_id", user.group_id)
     .eq("user_id", user.id)
     .eq("status", "unpaid")
@@ -59,7 +58,9 @@ export default async function UserPaymentCheckPage() {
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-md">
         <section className="rounded-lg bg-white p-6 shadow">
-          <h1 className="text-2xl font-bold">未払い項目があります</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            未払い項目があります
+          </h1>
 
           {currentTuitionUnpaid && (
             <p className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
@@ -68,31 +69,26 @@ export default async function UserPaymentCheckPage() {
           )}
 
           <div className="mt-5 rounded bg-red-50 p-4">
-            <p className="text-sm text-red-700">未払い合計</p>
+            <p className="text-sm font-bold text-red-700">未払い合計</p>
             <p className="mt-1 text-4xl font-bold text-red-700">
               {formatYen(unpaidTotal)}
             </p>
           </div>
 
           <div className="mt-6">
-            <h2 className="font-bold">未払い内訳</h2>
+            <h2 className="font-bold text-gray-900">未払い内訳</h2>
 
             <div className="mt-3 space-y-3">
               {items.map((item) => (
                 <div key={item.id} className="rounded border bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold">{item.title}</p>
-                      <p className="mt-1 text-sm text-gray-600">
-                        {formatTargetMonth(item.target_month)} /{" "}
+                      <p className="font-bold text-gray-900">
                         {categoryLabel(item.category)}
                       </p>
-
-                      {item.due_date && (
-                        <p className="mt-1 text-sm text-gray-600">
-                          期限：{item.due_date}
-                        </p>
-                      )}
+                      <p className="mt-1 text-sm font-medium text-gray-700">
+                        {formatTargetMonth(item.target_month)}
+                      </p>
                     </div>
 
                     <p className="font-bold text-red-700">
@@ -101,7 +97,7 @@ export default async function UserPaymentCheckPage() {
                   </div>
 
                   {item.note && (
-                    <p className="mt-3 rounded bg-gray-50 p-2 text-sm text-gray-700">
+                    <p className="mt-3 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
                       備考：{item.note}
                     </p>
                   )}
@@ -117,7 +113,7 @@ export default async function UserPaymentCheckPage() {
             確認してカレンダーへ進む
           </a>
 
-          <p className="mt-4 text-sm text-gray-600">
+          <p className="mt-4 text-sm font-medium text-gray-700">
             支払い済みの場合は、管理者側の確認後に表示が更新されます。
           </p>
         </section>

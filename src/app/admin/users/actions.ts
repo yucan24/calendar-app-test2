@@ -15,11 +15,6 @@ function isValidTargetMonth(value: string) {
   return /^\d{4}-\d{2}$/.test(value);
 }
 
-function isValidDate(value: string) {
-  if (!value) return true;
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
 function parseAmount(value: FormDataEntryValue | null) {
   const amount = Number(value);
 
@@ -28,6 +23,14 @@ function parseAmount(value: FormDataEntryValue | null) {
   }
 
   return amount;
+}
+
+function categoryLabel(category: string) {
+  if (category === "tuition") return "月謝";
+  if (category === "trip") return "遠征費";
+  if (category === "event") return "大会・イベント費";
+  if (category === "uniform") return "ユニフォーム代";
+  return "その他";
 }
 
 async function assertUserInAdminGroup(userId: string, groupId: string) {
@@ -68,9 +71,7 @@ export async function createBillingItem(formData: FormData) {
   const userId = cleanText(formData.get("user_id"));
   const targetMonth = cleanText(formData.get("target_month"));
   const category = cleanText(formData.get("category"));
-  const title = cleanText(formData.get("title"));
   const amount = parseAmount(formData.get("amount"));
-  const dueDate = cleanText(formData.get("due_date"));
   const note = cleanText(formData.get("note"));
 
   if (!userId) {
@@ -85,14 +86,6 @@ export async function createBillingItem(formData: FormData) {
     throw new Error("費目が不正です");
   }
 
-  if (!title) {
-    throw new Error("項目名を入力してください");
-  }
-
-  if (!isValidDate(dueDate)) {
-    throw new Error("期限日が不正です");
-  }
-
   await assertUserInAdminGroup(userId, admin.group_id);
 
   const { error } = await supabase.from("billing_items").insert({
@@ -100,10 +93,10 @@ export async function createBillingItem(formData: FormData) {
     user_id: userId,
     target_month: targetMonth,
     category,
-    title,
+    title: categoryLabel(category),
     amount,
     status: "unpaid",
-    due_date: dueDate || null,
+    due_date: null,
     note,
     created_by: admin.id,
     updated_at: new Date().toISOString(),
@@ -121,17 +114,11 @@ export async function createTuitionForAllUsers(formData: FormData) {
   const admin = await requireAdmin();
 
   const targetMonth = cleanText(formData.get("target_month"));
-  const title = cleanText(formData.get("title")) || "月謝";
   const amount = parseAmount(formData.get("amount"));
-  const dueDate = cleanText(formData.get("due_date"));
   const note = cleanText(formData.get("note"));
 
   if (!isValidTargetMonth(targetMonth)) {
     throw new Error("対象月が不正です");
-  }
-
-  if (!isValidDate(dueDate)) {
-    throw new Error("期限日が不正です");
   }
 
   const { data: users, error: usersError } = await supabase
@@ -173,10 +160,10 @@ export async function createTuitionForAllUsers(formData: FormData) {
       user_id: userId,
       target_month: targetMonth,
       category: "tuition",
-      title,
+      title: "月謝",
       amount,
       status: "unpaid",
-      due_date: dueDate || null,
+      due_date: null,
       note,
       created_by: admin.id,
       updated_at: new Date().toISOString(),

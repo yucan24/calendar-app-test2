@@ -35,10 +35,12 @@ type BillingItem = {
   title: string;
   amount: number;
   status: string;
-  due_date: string | null;
   note: string | null;
   paid_at: string | null;
 };
+
+const fieldClass =
+  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
 
 function categoryLabel(category: string) {
   if (category === "tuition") return "月謝";
@@ -56,7 +58,7 @@ function statusLabel(status: string) {
 
 function statusClass(status: string) {
   if (status === "paid") return "bg-green-100 text-green-800";
-  if (status === "exempt") return "bg-gray-100 text-gray-700";
+  if (status === "exempt") return "bg-gray-200 text-gray-800";
   return "bg-red-100 text-red-800";
 }
 
@@ -113,7 +115,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       ? await supabase
           .from("billing_items")
           .select(
-            "id, user_id, target_month, category, title, amount, status, due_date, note, paid_at"
+            "id, user_id, target_month, category, title, amount, status, note, paid_at"
           )
           .eq("group_id", admin.group_id)
           .in("user_id", userIds)
@@ -151,17 +153,25 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">ユーザー・請求管理</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-2xl font-bold text-gray-900">
+              ユーザー・請求管理
+            </h1>
+            <p className="mt-2 text-sm font-medium text-gray-700">
               月謝、遠征費、その他費用の未払い状況を管理します。
             </p>
           </div>
 
           <div className="flex gap-2">
-            <a href="/admin" className="rounded border bg-white px-4 py-2">
+            <a
+              href="/admin"
+              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+            >
               管理者画面に戻る
             </a>
-            <a href="/logout" className="rounded border bg-white px-4 py-2">
+            <a
+              href="/logout"
+              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+            >
               ログアウト
             </a>
           </div>
@@ -170,10 +180,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         <section className="mt-6 rounded-lg bg-white p-5 shadow">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold">
+              <h2 className="text-lg font-bold text-gray-900">
                 対象月：{formatTargetMonth(targetMonth)}
               </h2>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="mt-1 text-sm font-medium text-gray-700">
                 今月の月謝未払いと、全期間の未払い合計を表示します。
               </p>
             </div>
@@ -181,19 +191,19 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             <div className="flex gap-2">
               <a
                 href={`/admin/users?month=${prevMonth}`}
-                className="rounded border bg-white px-4 py-2"
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
               </a>
               <a
                 href={`/admin/users?month=${currentMonth}`}
-                className="rounded border bg-white px-4 py-2"
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 今月
               </a>
               <a
                 href={`/admin/users?month=${nextMonth}`}
-                className="rounded border bg-white px-4 py-2"
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月
               </a>
@@ -202,74 +212,72 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         </section>
 
         <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <h2 className="text-lg font-bold">月謝を一括作成</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            対象月に月謝がまだ登録されていないユーザーへ、一括で月謝を作成します。
-          </p>
+          <details>
+            <summary className="cursor-pointer text-lg font-bold text-gray-900">
+              月謝を一括作成
+            </summary>
 
-          <form action={createTuitionForAllUsers} className="mt-4 grid gap-3 sm:grid-cols-5">
-            <div>
-              <label className="block text-sm font-medium">対象月</label>
-              <input
-                name="target_month"
-                type="month"
-                defaultValue={targetMonth}
-                className="mt-1 w-full rounded border px-3 py-2"
-              />
-            </div>
+            <p className="mt-3 text-sm font-medium text-gray-700">
+              対象月に月謝がまだ登録されていないユーザーへ、一括で月謝を作成します。
+            </p>
 
-            <div>
-              <label className="block text-sm font-medium">項目名</label>
-              <input
-                name="title"
-                defaultValue="月謝"
-                className="mt-1 w-full rounded border px-3 py-2"
-              />
-            </div>
+            <form
+              action={createTuitionForAllUsers}
+              className="mt-4 grid min-w-0 gap-3 sm:grid-cols-3"
+            >
+              <div className="min-w-0">
+                <label className="block text-sm font-bold text-gray-900">
+                  対象月
+                </label>
+                <input
+                  name="target_month"
+                  type="month"
+                  defaultValue={targetMonth}
+                  className={fieldClass}
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium">金額</label>
-              <input
-                name="amount"
-                type="number"
-                min={0}
-                required
-                placeholder="5000"
-                className="mt-1 w-full rounded border px-3 py-2"
-              />
-            </div>
+              <div className="min-w-0">
+                <label className="block text-sm font-bold text-gray-900">
+                  金額
+                </label>
+                <input
+                  name="amount"
+                  type="number"
+                  min={0}
+                  required
+                  placeholder="5000"
+                  className={fieldClass}
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium">期限日</label>
-              <input
-                name="due_date"
-                type="date"
-                className="mt-1 w-full rounded border px-3 py-2"
-              />
-            </div>
+              <div className="flex min-w-0 items-end">
+                <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                  一括作成
+                </button>
+              </div>
 
-            <div className="flex items-end">
-              <button className="w-full rounded bg-black px-4 py-2 text-white">
-                一括作成
-              </button>
-            </div>
-
-            <div className="sm:col-span-5">
-              <label className="block text-sm font-medium">備考</label>
-              <input
-                name="note"
-                className="mt-1 w-full rounded border px-3 py-2"
-                placeholder="例：6月分月謝"
-              />
-            </div>
-          </form>
+              <div className="min-w-0 sm:col-span-3">
+                <label className="block text-sm font-bold text-gray-900">
+                  備考
+                </label>
+                <input
+                  name="note"
+                  className={fieldClass}
+                  placeholder="例：6月分月謝"
+                />
+              </div>
+            </form>
+          </details>
         </section>
 
         <section className="mt-6 rounded-lg bg-white p-5 shadow">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold">未払い者への督促</h2>
-              <p className="mt-1 text-sm text-gray-600">
+              <h2 className="text-lg font-bold text-gray-900">
+                未払い者への督促
+              </h2>
+              <p className="mt-1 text-sm font-medium text-gray-700">
                 未払いがあるユーザー：{unpaidUsers.length}名
               </p>
             </div>
@@ -277,14 +285,14 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             {unpaidUsers.length > 0 ? (
               <a
                 href={reminderHref}
-                className="rounded bg-orange-500 px-4 py-2 text-center font-bold text-white"
+                className="rounded bg-orange-500 px-4 py-3 text-center font-bold text-white"
               >
                 未払い者にまとめて督促メール
               </a>
             ) : (
               <button
                 disabled
-                className="rounded bg-gray-200 px-4 py-2 text-gray-500"
+                className="rounded bg-gray-200 px-4 py-3 font-bold text-gray-600"
               >
                 未払い者なし
               </button>
@@ -315,8 +323,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <article key={user.id} className="rounded-lg bg-white p-5 shadow">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-bold">{user.name}</h2>
-                    <p className="mt-1 text-sm text-gray-600">{user.email}</p>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {user.name}
+                    </h2>
+                    <p className="mt-1 text-sm font-medium text-gray-700">
+                      {user.email}
+                    </p>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {currentTuition?.status === "unpaid" && (
@@ -326,7 +338,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       )}
 
                       {!currentTuition && (
-                        <span className="rounded bg-gray-100 px-3 py-1 text-sm font-bold text-gray-600">
+                        <span className="rounded bg-gray-200 px-3 py-1 text-sm font-bold text-gray-800">
                           今月月謝未登録
                         </span>
                       )}
@@ -338,7 +350,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       )}
 
                       {currentTuition?.status === "exempt" && (
-                        <span className="rounded bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+                        <span className="rounded bg-gray-200 px-3 py-1 text-sm font-bold text-gray-800">
                           今月月謝免除
                         </span>
                       )}
@@ -346,40 +358,49 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   </div>
 
                   <div className="rounded bg-red-50 px-4 py-3 text-right">
-                    <p className="text-sm text-red-700">未払い合計</p>
+                    <p className="text-sm font-bold text-red-700">
+                      未払い合計
+                    </p>
                     <p className="text-2xl font-bold text-red-700">
                       {formatYen(unpaidTotal)}
                     </p>
                   </div>
                 </div>
 
-                <details className="mt-5 rounded border bg-gray-50 p-4">
-                  <summary className="cursor-pointer font-bold">
+                <details className="mt-5 rounded border border-gray-300 bg-gray-50 p-4">
+                  <summary className="cursor-pointer font-bold text-gray-900">
                     請求項目を管理
                   </summary>
 
                   <div className="mt-4 rounded bg-white p-4">
-                    <h3 className="font-bold">請求項目を追加</h3>
+                    <h3 className="font-bold text-gray-900">請求項目を追加</h3>
 
-                    <form action={createBillingItem} className="mt-3 grid gap-3 sm:grid-cols-6">
+                    <form
+                      action={createBillingItem}
+                      className="mt-3 grid min-w-0 gap-3 sm:grid-cols-4"
+                    >
                       <input type="hidden" name="user_id" value={user.id} />
 
-                      <div>
-                        <label className="block text-sm font-medium">対象月</label>
+                      <div className="min-w-0">
+                        <label className="block text-sm font-bold text-gray-900">
+                          対象月
+                        </label>
                         <input
                           name="target_month"
                           type="month"
                           defaultValue={targetMonth}
-                          className="mt-1 w-full rounded border px-3 py-2"
+                          className={fieldClass}
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium">費目</label>
+                      <div className="min-w-0">
+                        <label className="block text-sm font-bold text-gray-900">
+                          費目
+                        </label>
                         <select
                           name="category"
                           defaultValue="other"
-                          className="mt-1 w-full rounded border px-3 py-2"
+                          className={fieldClass}
                         >
                           <option value="tuition">月謝</option>
                           <option value="trip">遠征費</option>
@@ -389,47 +410,32 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium">項目名</label>
-                        <input
-                          name="title"
-                          required
-                          placeholder="例：遠征費"
-                          className="mt-1 w-full rounded border px-3 py-2"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium">金額</label>
+                      <div className="min-w-0">
+                        <label className="block text-sm font-bold text-gray-900">
+                          金額
+                        </label>
                         <input
                           name="amount"
                           type="number"
                           min={0}
                           required
-                          className="mt-1 w-full rounded border px-3 py-2"
+                          className={fieldClass}
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium">期限日</label>
-                        <input
-                          name="due_date"
-                          type="date"
-                          className="mt-1 w-full rounded border px-3 py-2"
-                        />
-                      </div>
-
-                      <div className="flex items-end">
-                        <button className="w-full rounded bg-black px-4 py-2 text-white">
+                      <div className="flex min-w-0 items-end">
+                        <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
                           追加
                         </button>
                       </div>
 
-                      <div className="sm:col-span-6">
-                        <label className="block text-sm font-medium">備考</label>
+                      <div className="min-w-0 sm:col-span-4">
+                        <label className="block text-sm font-bold text-gray-900">
+                          備考
+                        </label>
                         <input
                           name="note"
-                          className="mt-1 w-full rounded border px-3 py-2"
+                          className={fieldClass}
                           placeholder="例：○○大会交通費、宿泊費込み"
                         />
                       </div>
@@ -437,12 +443,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   </div>
 
                   <div className="mt-4">
-                    <h3 className="font-bold">
+                    <h3 className="font-bold text-gray-900">
                       {formatTargetMonth(targetMonth)} の請求項目
                     </h3>
 
                     {targetMonthItems.length === 0 ? (
-                      <p className="mt-2 rounded bg-white p-3 text-sm text-gray-600">
+                      <p className="mt-2 rounded bg-white p-3 text-sm font-medium text-gray-700">
                         この月の請求項目はありません。
                       </p>
                     ) : (
@@ -450,7 +456,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         {targetMonthItems.map((item) => (
                           <div
                             key={item.id}
-                            className="rounded border bg-white p-4"
+                            className="rounded border border-gray-300 bg-white p-4"
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div>
@@ -463,27 +469,21 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                     {statusLabel(item.status)}
                                   </span>
 
-                                  <span className="rounded bg-gray-100 px-2 py-1 text-xs">
+                                  <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800">
                                     {categoryLabel(item.category)}
                                   </span>
                                 </div>
 
-                                <p className="mt-2 text-lg font-bold">
-                                  {item.title}
+                                <p className="mt-2 text-lg font-bold text-gray-900">
+                                  {categoryLabel(item.category)}
                                 </p>
 
-                                <p className="mt-1 text-sm text-gray-600">
+                                <p className="mt-1 text-sm font-medium text-gray-700">
                                   金額：{formatYen(item.amount)}
                                 </p>
 
-                                {item.due_date && (
-                                  <p className="mt-1 text-sm text-gray-600">
-                                    期限：{item.due_date}
-                                  </p>
-                                )}
-
                                 {item.note && (
-                                  <p className="mt-2 rounded bg-gray-50 p-2 text-sm text-gray-700">
+                                  <p className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
                                     備考：{item.note}
                                   </p>
                                 )}
@@ -533,7 +533,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                     name="status"
                                     value="exempt"
                                   />
-                                  <button className="w-full rounded bg-gray-600 px-3 py-2 text-sm font-bold text-white">
+                                  <button className="w-full rounded bg-gray-700 px-3 py-2 text-sm font-bold text-white">
                                     免除
                                   </button>
                                 </form>
@@ -553,13 +553,13 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         {unpaidItems.map((item) => (
                           <div
                             key={item.id}
-                            className="flex justify-between rounded bg-red-50 px-3 py-2 text-sm"
+                            className="flex justify-between gap-3 rounded bg-red-50 px-3 py-2 text-sm"
                           >
-                            <span>
+                            <span className="font-medium text-gray-900">
                               {formatTargetMonth(item.target_month)}{" "}
-                              {item.title}
+                              {categoryLabel(item.category)}
                             </span>
-                            <span className="font-bold">
+                            <span className="font-bold text-red-700">
                               {formatYen(item.amount)}
                             </span>
                           </div>
