@@ -83,6 +83,9 @@ const STATUS_OPTIONS = [
 const LONG_PRESS_MS = 450;
 const SCROLL_MOVE_THRESHOLD = 14;
 
+const fieldClass =
+  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 px-3 py-2 text-base";
+
 function toDateKeyFromParts(year: number, month: number, date = 1) {
   return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(
     2,
@@ -430,7 +433,7 @@ export default function AdminCalendarClient({
     setEditTitleColor(selectedEvent.title_color || "#111827");
     setEditLocationColor(selectedEvent.location_color || "#111827");
     setEditTimeColor(selectedEvent.time_color || "#111827");
-  }, [selectedEvent?.id]);
+  }, [selectedEvent]);
 
   const bulkEvents = useMemo(() => {
     return uniqueSortedDateKeys(bulkDateKeys).flatMap((dateKey) => {
@@ -879,6 +882,312 @@ export default function AdminCalendarClient({
     setDragKeys([]);
   }
 
+  function renderNewEventForm(isHiddenMode: boolean) {
+    return (
+      <section
+        className={
+          isHiddenMode
+            ? "mt-5"
+            : "mt-5 rounded-lg border bg-white p-4 overflow-hidden"
+        }
+      >
+        {isHiddenMode ? (
+          <details className="rounded-lg border bg-white p-4">
+            <summary className="cursor-pointer text-lg font-bold">
+              予定の追加
+            </summary>
+
+            <div className="mt-4">{renderNewEventFormBody()}</div>
+          </details>
+        ) : (
+          <>
+            <h3 className="text-lg font-bold">この日付に予定を登録</h3>
+            <div className="mt-4">{renderNewEventFormBody()}</div>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  function renderNewEventFormBody() {
+    return (
+      <div className="space-y-3">
+        <div className="min-w-0">
+          <label className="block text-sm font-medium">予定名</label>
+          <input
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            className={fieldClass}
+            placeholder="例：通常練習 / 試合 / テスト期間"
+          />
+        </div>
+
+        <div className="min-w-0">
+          <label className="block text-sm font-medium">場所</label>
+          <input
+            value={newLocation}
+            onChange={(event) => setNewLocation(event.target.value)}
+            className={fieldClass}
+            placeholder="例：第一体育館"
+          />
+        </div>
+
+        <div className="min-w-0">
+          <label className="block text-sm font-medium">時間</label>
+          <input
+            value={newTimeText}
+            onChange={(event) => setNewTimeText(event.target.value)}
+            className={fieldClass}
+            placeholder="例：AM / PM / 終日 / 9:00-12:00"
+          />
+        </div>
+
+        <div className="min-w-0">
+          <label className="block text-sm font-medium">内容</label>
+          <textarea
+            value={newDescription}
+            onChange={(event) => setNewDescription(event.target.value)}
+            className={fieldClass}
+            placeholder="持ち物、補足など"
+          />
+        </div>
+
+        <details className="rounded bg-gray-50 p-3">
+          <summary className="cursor-pointer text-sm font-bold">詳細設定</summary>
+
+          <div className="mt-3 space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={newAttendanceRequired}
+                onChange={(event) =>
+                  setNewAttendanceRequired(event.target.checked)
+                }
+                disabled={newIsPeriod}
+              />
+              出欠回答を必要にする
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={newIsPeriod}
+                onChange={(event) => {
+                  setNewIsPeriod(event.target.checked);
+
+                  if (event.target.checked) {
+                    setNewAttendanceRequired(false);
+                  }
+                }}
+              />
+              期間予定として下部に表示する
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={newIsHoliday}
+                onChange={(event) => setNewIsHoliday(event.target.checked)}
+              />
+              祝日扱いにする
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                <span>予定</span>
+                <input
+                  type="color"
+                  value={newTitleColor}
+                  onChange={(event) => setNewTitleColor(event.target.value)}
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                <span>場所</span>
+                <input
+                  type="color"
+                  value={newLocationColor}
+                  onChange={(event) => setNewLocationColor(event.target.value)}
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                <span>時間</span>
+                <input
+                  type="color"
+                  value={newTimeColor}
+                  onChange={(event) => setNewTimeColor(event.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={saveSingleCreateEvent}
+          className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-40"
+        >
+          予定を登録
+        </button>
+      </div>
+    );
+  }
+
+  function renderEditEventForm() {
+    if (!selectedEvent) return null;
+
+    return (
+      <details className="mt-5 rounded-lg border bg-white p-4 overflow-hidden">
+        <summary className="cursor-pointer text-lg font-bold">予定の編集</summary>
+
+        <div className="mt-4 space-y-3">
+          <div className="min-w-0">
+            <label className="block text-sm font-medium">日付</label>
+            <input
+              type="date"
+              value={editDateKey}
+              onChange={(event) => setEditDateKey(event.target.value)}
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-medium">予定名</label>
+            <input
+              value={editTitle}
+              onChange={(event) => setEditTitle(event.target.value)}
+              className={fieldClass}
+              placeholder="例：通常練習 / 試合 / テスト期間"
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-medium">場所</label>
+            <input
+              value={editLocation}
+              onChange={(event) => setEditLocation(event.target.value)}
+              className={fieldClass}
+              placeholder="例：第一体育館"
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-medium">時間</label>
+            <input
+              value={editTimeText}
+              onChange={(event) => setEditTimeText(event.target.value)}
+              className={fieldClass}
+              placeholder="例：AM / PM / 終日 / 9:00-12:00"
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-medium">内容</label>
+            <textarea
+              value={editDescription}
+              onChange={(event) => setEditDescription(event.target.value)}
+              className={fieldClass}
+              placeholder="持ち物、補足など"
+            />
+          </div>
+
+          <details className="rounded bg-gray-50 p-3">
+            <summary className="cursor-pointer text-sm font-bold">
+              詳細設定
+            </summary>
+
+            <div className="mt-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editAttendanceRequired}
+                  onChange={(event) =>
+                    setEditAttendanceRequired(event.target.checked)
+                  }
+                  disabled={editIsPeriod}
+                />
+                出欠回答を必要にする
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editIsPeriod}
+                  onChange={(event) => {
+                    setEditIsPeriod(event.target.checked);
+
+                    if (event.target.checked) {
+                      setEditAttendanceRequired(false);
+                    }
+                  }}
+                />
+                期間予定として下部に表示する
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editIsHoliday}
+                  onChange={(event) => setEditIsHoliday(event.target.checked)}
+                />
+                祝日扱いにする
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                  <span>予定</span>
+                  <input
+                    type="color"
+                    value={editTitleColor}
+                    onChange={(event) => setEditTitleColor(event.target.value)}
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                  <span>場所</span>
+                  <input
+                    type="color"
+                    value={editLocationColor}
+                    onChange={(event) =>
+                      setEditLocationColor(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
+                  <span>時間</span>
+                  <input
+                    type="color"
+                    value={editTimeColor}
+                    onChange={(event) => setEditTimeColor(event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={saveSelectedEventEdit}
+            className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-40"
+          >
+            予定を更新
+          </button>
+
+          <a
+            href={`/admin/calendar/${selectedEvent.id}`}
+            className="block rounded border bg-white px-4 py-3 text-center text-sm font-bold"
+          >
+            詳細画面を開く
+          </a>
+        </div>
+      </details>
+    );
+  }
+
   return (
     <>
       <section className="mt-6 rounded-lg bg-white p-2 shadow sm:mt-8 sm:p-4">
@@ -1173,7 +1482,7 @@ export default function AdminCalendarClient({
           onClick={closeModal}
         >
           <div
-            className="max-h-[calc(100vh-24px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
+            className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -1286,7 +1595,7 @@ export default function AdminCalendarClient({
                   <input
                     value={bulkCreateTitle}
                     onChange={(event) => setBulkCreateTitle(event.target.value)}
-                    className="mt-1 w-full rounded border px-3 py-2"
+                    className={fieldClass}
                     placeholder="例：通常練習 / 試合 / テスト期間"
                   />
                 </div>
@@ -1298,7 +1607,7 @@ export default function AdminCalendarClient({
                     onChange={(event) =>
                       setBulkCreateLocation(event.target.value)
                     }
-                    className="mt-1 w-full rounded border px-3 py-2"
+                    className={fieldClass}
                     placeholder="例：第一体育館"
                   />
                 </div>
@@ -1310,7 +1619,7 @@ export default function AdminCalendarClient({
                     onChange={(event) =>
                       setBulkCreateTimeText(event.target.value)
                     }
-                    className="mt-1 w-full rounded border px-3 py-2"
+                    className={fieldClass}
                     placeholder="例：AM / PM / 終日 / 9:00-12:00"
                   />
                 </div>
@@ -1322,7 +1631,7 @@ export default function AdminCalendarClient({
                     onChange={(event) =>
                       setBulkCreateDescription(event.target.value)
                     }
-                    className="mt-1 w-full rounded border px-3 py-2"
+                    className={fieldClass}
                     placeholder="持ち物、補足など"
                   />
                 </div>
@@ -1399,7 +1708,7 @@ export default function AdminCalendarClient({
           onClick={closeModal}
         >
           <div
-            className="max-h-[calc(100vh-24px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
+            className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -1408,7 +1717,7 @@ export default function AdminCalendarClient({
                   {formatDateLabel(selectedDateKey)}
                 </p>
                 <h2 className="mt-1 text-xl font-bold">
-                  {selectedEvent ? "予定編集" : "予定登録"}
+                  {selectedEvent ? "予定詳細" : "予定登録"}
                 </h2>
               </div>
 
@@ -1467,202 +1776,12 @@ export default function AdminCalendarClient({
               )}
             </div>
 
-            <section className="mt-5 rounded-lg border bg-white p-4">
-              <h3 className="text-lg font-bold">
-                {selectedEvent ? "予定を編集" : "この日付に予定を登録"}
-              </h3>
-
-              <div className="mt-4 space-y-3">
-                {selectedEvent && (
-                  <div>
-                    <label className="block text-sm font-medium">日付</label>
-                    <input
-                      type="date"
-                      value={editDateKey}
-                      onChange={(event) => setEditDateKey(event.target.value)}
-                      className="mt-1 w-full rounded border px-3 py-2"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium">予定名</label>
-                  <input
-                    value={selectedEvent ? editTitle : newTitle}
-                    onChange={(event) =>
-                      selectedEvent
-                        ? setEditTitle(event.target.value)
-                        : setNewTitle(event.target.value)
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    placeholder="例：通常練習 / 試合 / テスト期間"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium">場所</label>
-                  <input
-                    value={selectedEvent ? editLocation : newLocation}
-                    onChange={(event) =>
-                      selectedEvent
-                        ? setEditLocation(event.target.value)
-                        : setNewLocation(event.target.value)
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    placeholder="例：第一体育館"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium">時間</label>
-                  <input
-                    value={selectedEvent ? editTimeText : newTimeText}
-                    onChange={(event) =>
-                      selectedEvent
-                        ? setEditTimeText(event.target.value)
-                        : setNewTimeText(event.target.value)
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    placeholder="例：AM / PM / 終日 / 9:00-12:00"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium">内容</label>
-                  <textarea
-                    value={selectedEvent ? editDescription : newDescription}
-                    onChange={(event) =>
-                      selectedEvent
-                        ? setEditDescription(event.target.value)
-                        : setNewDescription(event.target.value)
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2"
-                    placeholder="持ち物、補足など"
-                  />
-                </div>
-
-                <details className="rounded bg-gray-50 p-3">
-                  <summary className="cursor-pointer text-sm font-bold">
-                    詳細設定
-                  </summary>
-
-                  <div className="mt-3 space-y-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={
-                          selectedEvent
-                            ? editAttendanceRequired
-                            : newAttendanceRequired
-                        }
-                        onChange={(event) =>
-                          selectedEvent
-                            ? setEditAttendanceRequired(event.target.checked)
-                            : setNewAttendanceRequired(event.target.checked)
-                        }
-                        disabled={selectedEvent ? editIsPeriod : newIsPeriod}
-                      />
-                      出欠回答を必要にする
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selectedEvent ? editIsPeriod : newIsPeriod}
-                        onChange={(event) => {
-                          if (selectedEvent) {
-                            setEditIsPeriod(event.target.checked);
-                            if (event.target.checked) {
-                              setEditAttendanceRequired(false);
-                            }
-                          } else {
-                            setNewIsPeriod(event.target.checked);
-                            if (event.target.checked) {
-                              setNewAttendanceRequired(false);
-                            }
-                          }
-                        }}
-                      />
-                      期間予定として下部に表示する
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selectedEvent ? editIsHoliday : newIsHoliday}
-                        onChange={(event) =>
-                          selectedEvent
-                            ? setEditIsHoliday(event.target.checked)
-                            : setNewIsHoliday(event.target.checked)
-                        }
-                      />
-                      祝日扱いにする
-                    </label>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
-                        <span>予定</span>
-                        <input
-                          type="color"
-                          value={selectedEvent ? editTitleColor : newTitleColor}
-                          onChange={(event) =>
-                            selectedEvent
-                              ? setEditTitleColor(event.target.value)
-                              : setNewTitleColor(event.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
-                        <span>場所</span>
-                        <input
-                          type="color"
-                          value={
-                            selectedEvent ? editLocationColor : newLocationColor
-                          }
-                          onChange={(event) =>
-                            selectedEvent
-                              ? setEditLocationColor(event.target.value)
-                              : setNewLocationColor(event.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="flex items-center justify-between gap-2 rounded border bg-white px-3 py-2 text-sm">
-                        <span>時間</span>
-                        <input
-                          type="color"
-                          value={selectedEvent ? editTimeColor : newTimeColor}
-                          onChange={(event) =>
-                            selectedEvent
-                              ? setEditTimeColor(event.target.value)
-                              : setNewTimeColor(event.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </details>
-
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={
-                    selectedEvent ? saveSelectedEventEdit : saveSingleCreateEvent
-                  }
-                  className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-40"
-                >
-                  {selectedEvent ? "予定を更新" : "予定を登録"}
-                </button>
-              </div>
-            </section>
-
             {selectedEvent && selectedEvent.attendance_required && (
               <section className="mt-5 rounded-lg border bg-white p-4">
-                <h3 className="text-lg font-bold">自分の出欠回答</h3>
+                <h3 className="text-lg font-bold">出欠回答</h3>
 
                 <p className="mt-2 text-sm font-bold">
-                  現在の回答：
+                  自分の回答：
                   {statusLongLabel(localResponses[selectedEvent.id] ?? "")}
                 </p>
 
@@ -1731,16 +1850,11 @@ export default function AdminCalendarClient({
               </p>
             )}
 
-            {selectedEvent && (
-              <div className="mt-5">
-                <a
-                  href={`/admin/calendar/${selectedEvent.id}`}
-                  className="inline-block rounded border bg-white px-4 py-2 text-sm font-bold"
-                >
-                  詳細画面を開く
-                </a>
-              </div>
-            )}
+            {selectedEvent && renderEditEventForm()}
+
+            {selectedEvent && renderNewEventForm(true)}
+
+            {!selectedEvent && renderNewEventForm(false)}
 
             <div className="mt-4 min-h-5 text-sm">
               {isPending && <span className="text-gray-600">保存中...</span>}
