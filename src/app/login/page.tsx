@@ -118,6 +118,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <SubmitButton
             pendingText="ログイン中..."
             className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
+          >
             ログイン
           </Submitbutton>
 
