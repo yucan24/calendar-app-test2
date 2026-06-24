@@ -173,15 +173,18 @@ function formatMinutes(value: number) {
   return `${hours}時間${minutes}分`;
 }
 
-function formatMinutesShort(value: number) {
-  const hours = Math.floor(value / 60);
-  const minutes = value % 60;
+function formatHoursShort(value: number) {
+  const hours = value / 60;
 
-  if (hours === 0 && minutes === 0) return "0h";
-  if (minutes === 0) return `${hours}h`;
-  if (hours === 0) return `${minutes}m`;
+  if (hours === 0) return "0h";
 
-  return `${hours}h${minutes}m`;
+  const rounded = Math.round(hours * 100) / 100;
+
+  if (Number.isInteger(rounded)) {
+    return `${rounded}h`;
+  }
+
+  return `${rounded}h`;
 }
 
 function formatHoursInputValue(minutes: number) {
@@ -311,6 +314,9 @@ export default function CoachWorkCalendarClient({
   );
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
+  const [selectedSummaryCoachId, setSelectedSummaryCoachId] = useState<
+    string | null
+  >(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -365,6 +371,7 @@ export default function CoachWorkCalendarClient({
         adminMinutes: number;
         travelExpense: number;
         otherExpense: number;
+        count: number;
       }
     >();
 
@@ -374,6 +381,7 @@ export default function CoachWorkCalendarClient({
         adminMinutes: 0,
         travelExpense: 0,
         otherExpense: 0,
+        count: 0,
       });
     }
 
@@ -386,6 +394,7 @@ export default function CoachWorkCalendarClient({
       summary.adminMinutes += log.admin_minutes;
       summary.travelExpense += log.travel_expense;
       summary.otherExpense += log.other_expense;
+      summary.count += 1;
     }
 
     return map;
@@ -400,6 +409,23 @@ export default function CoachWorkCalendarClient({
     : [];
 
   const selectedDateKeyList = Array.from(selectedDateKeys).sort();
+
+  const selectedSummaryCoach = selectedSummaryCoachId
+    ? coaches.find((coach) => coach.id === selectedSummaryCoachId) ?? null
+    : null;
+
+  const selectedSummaryLogs = useMemo(() => {
+    if (!selectedSummaryCoachId) return [];
+
+    return logs
+      .filter((log) => log.coach_id === selectedSummaryCoachId)
+      .slice()
+      .sort((a, b) => {
+        const dateCompare = a.work_date.localeCompare(b.work_date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.created_at.localeCompare(b.created_at);
+      });
+  }, [logs, selectedSummaryCoachId]);
 
   function clearLongPressTimer() {
     if (longPressTimerRef.current !== null) {
@@ -426,6 +452,10 @@ export default function CoachWorkCalendarClient({
     setIsBulkModalOpen(false);
     setSelectedDateKeys(new Set());
     setErrorMessage("");
+  }
+
+  function closeSummaryModal() {
+    setSelectedSummaryCoachId(null);
   }
 
   function getDateKeyFromPoint(clientX: number, clientY: number) {
@@ -679,37 +709,23 @@ export default function CoachWorkCalendarClient({
     }
 
     return (
-      <div className="mt-0.5">
+      <div className="mt-1 space-y-0.5">
         {coachingTotal > 0 && (
-          <div
-            style={calendarTextStyle(
-              `指:${formatMinutesShort(coachingTotal)}`,
-              "#111827"
-            )}
-          >
-            {`指:${formatMinutesShort(coachingTotal)}`}
+          <div className="rounded bg-blue-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-blue-800">
+            指:{formatHoursShort(coachingTotal)}
           </div>
         )}
 
         {adminTotal > 0 && (
-          <div
-            style={calendarTextStyle(
-              `事:${formatMinutesShort(adminTotal)}`,
-              "#111827"
-            )}
-          >
-            {`事:${formatMinutesShort(adminTotal)}`}
+          <div className="rounded bg-purple-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-purple-800">
+            事:{formatHoursShort(adminTotal)}
           </div>
         )}
       </div>
     );
   }
 
-  function renderEventCard(
-    event: CalendarEvent,
-    coachingTotal: number,
-    adminTotal: number
-  ) {
+  function renderEventBlock(event: CalendarEvent) {
     return (
       <div key={event.id}>
         <div style={calendarTextStyle(event.title, event.title_color)}>
@@ -727,8 +743,6 @@ export default function CoachWorkCalendarClient({
             {displayText(event.time_text)}
           </div>
         )}
-
-        {renderWorkTimeOnCalendar(coachingTotal, adminTotal)}
       </div>
     );
   }
@@ -855,7 +869,7 @@ export default function CoachWorkCalendarClient({
               </div>
             ))}
 
-            {cells.map((cell) => {
+            {cells.map((cell, index) => {
               const dayLogs = logsByDate.get(cell.dateKey) ?? [];
               const dayEvents = eventsByDate.get(cell.dateKey) ?? [];
 
@@ -877,6 +891,18 @@ export default function CoachWorkCalendarClient({
 
               const isToday = cell.dateKey === todayKey;
               const isSelected = selectedDateKeys.has(cell.dateKey);
+              const weekIndex = index % 7;
+              const isSaturday = weekIndex === 5;
+              const isSunday = weekIndex === 6;
+              const isHoliday = dayEvents.some((event) => event.is_holiday);
+
+              const dateColorClass = !cell.isCurrentMonth
+                ? "text-gray-400"
+                : isSunday || isHoliday
+                  ? "text-red-600"
+                  : isSaturday
+                    ? "text-blue-600"
+                    : "text-gray-900";
 
               return (
                 <button
@@ -900,8 +926,8 @@ export default function CoachWorkCalendarClient({
                   <div
                     className={
                       isToday
-                        ? "inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold text-gray-900"
-                        : "inline-flex h-7 w-7 items-center justify-center text-sm font-bold"
+                        ? `inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold ${dateColorClass}`
+                        : `inline-flex h-7 w-7 items-center justify-center text-sm font-bold ${dateColorClass}`
                     }
                   >
                     {cell.day}
@@ -909,24 +935,16 @@ export default function CoachWorkCalendarClient({
 
                   <div className="mt-1 space-y-1">
                     {normalEvents.slice(0, 2).map((event) =>
-                      renderEventCard(event, coachingTotal, adminTotal)
+                      renderEventBlock(event)
                     )}
-
-                    {normalEvents.length === 0 &&
-                      (coachingTotal > 0 || adminTotal > 0) && (
-                        <div>
-                          {renderWorkTimeOnCalendar(
-                            coachingTotal,
-                            adminTotal
-                          )}
-                        </div>
-                      )}
 
                     {normalEvents.length > 2 && (
                       <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
                         他 {normalEvents.length - 2}件
                       </div>
                     )}
+
+                    {renderWorkTimeOnCalendar(coachingTotal, adminTotal)}
                   </div>
 
                   <div className="mt-auto space-y-1 pt-1">
@@ -962,7 +980,17 @@ export default function CoachWorkCalendarClient({
                   key={coach.id}
                   className="rounded border border-gray-300 bg-white p-3"
                 >
-                  <h3 className="font-bold text-gray-900">{coach.name}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSummaryCoachId(coach.id)}
+                    className="text-left text-lg font-bold text-gray-900 underline decoration-gray-400 underline-offset-4"
+                  >
+                    {coach.name}
+                  </button>
+
+                  <p className="mt-1 text-xs font-medium text-gray-600">
+                    名前を押すと登録内容の詳細を確認できます。
+                  </p>
 
                   <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                     <div className="rounded bg-blue-50 p-2">
@@ -1328,6 +1356,110 @@ export default function CoachWorkCalendarClient({
                 選択日にまとめて保存
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {selectedSummaryCoach && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {selectedSummaryCoach.name} の登録詳細
+                </h2>
+                <p className="mt-1 text-sm font-medium text-gray-700">
+                  {formatTargetMonth(targetMonth)} の勤怠・立替記録
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeSummaryModal}
+                className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
+              >
+                ×
+              </button>
+            </div>
+
+            {selectedSummaryLogs.length === 0 ? (
+              <p className="mt-4 rounded bg-gray-50 p-3 text-sm font-medium text-gray-700">
+                この月の登録はありません。
+              </p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {selectedSummaryLogs.map((log) => {
+                  const dayEvents = eventsByDate.get(log.work_date) ?? [];
+                  const enteredByName = log.entered_by
+                    ? coachNameById.get(log.entered_by) ?? "不明"
+                    : "不明";
+
+                  return (
+                    <article
+                      key={log.id}
+                      className="rounded border border-gray-300 bg-white p-4"
+                    >
+                      <h3 className="font-bold text-gray-900">
+                        {formatDate(log.work_date)}
+                      </h3>
+
+                      {dayEvents.length > 0 && (
+                        <div className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
+                          <p className="font-bold text-gray-900">予定</p>
+                          {dayEvents.map((event) => (
+                            <div key={event.id} className="mt-1">
+                              {event.title}
+                              {event.location ? ` / ${event.location}` : ""}
+                              {event.time_text ? ` / ${event.time_text}` : ""}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded bg-blue-50 p-2">
+                          <p className="font-bold text-blue-800">指導</p>
+                          <p className="font-bold text-blue-900">
+                            {formatMinutes(log.coaching_minutes)}
+                          </p>
+                        </div>
+
+                        <div className="rounded bg-purple-50 p-2">
+                          <p className="font-bold text-purple-800">事務</p>
+                          <p className="font-bold text-purple-900">
+                            {formatMinutes(log.admin_minutes)}
+                          </p>
+                        </div>
+
+                        <div className="rounded bg-gray-50 p-2">
+                          <p className="font-bold text-gray-800">交通費</p>
+                          <p className="font-bold text-gray-900">
+                            {formatYen(log.travel_expense)}
+                          </p>
+                        </div>
+
+                        <div className="rounded bg-red-50 p-2">
+                          <p className="font-bold text-red-800">その他</p>
+                          <p className="font-bold text-red-900">
+                            {formatYen(log.other_expense)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {log.note && (
+                        <p className="mt-3 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
+                          備考：{log.note}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-xs font-medium text-gray-600">
+                        入力者：{enteredByName}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
