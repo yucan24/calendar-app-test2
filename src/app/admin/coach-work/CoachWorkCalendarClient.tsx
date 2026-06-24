@@ -184,12 +184,14 @@ function formatMinutesShort(value: number) {
   return `${hours}h${minutes}m`;
 }
 
-function getHourPart(value: number) {
-  return Math.floor(value / 60);
-}
+function formatHoursInputValue(minutes: number) {
+  const hours = minutes / 60;
 
-function getMinutePart(value: number) {
-  return value % 60;
+  if (Number.isInteger(hours)) {
+    return String(hours);
+  }
+
+  return String(Math.round(hours * 100) / 100);
 }
 
 function getErrorMessage(error: unknown) {
@@ -428,7 +430,10 @@ export default function CoachWorkCalendarClient({
 
   function getDateKeyFromPoint(clientX: number, clientY: number) {
     const element = document.elementFromPoint(clientX, clientY);
-    const dateElement = element?.closest("[data-date-key]") as HTMLElement | null;
+    const dateElement = element?.closest(
+      "[data-date-key]"
+    ) as HTMLElement | null;
+
     return dateElement?.dataset.dateKey ?? null;
   }
 
@@ -555,6 +560,7 @@ export default function CoachWorkCalendarClient({
     startTransition(async () => {
       try {
         await deleteCoachWorkLog(formData);
+        closeSingleModal();
         router.refresh();
       } catch (error) {
         setErrorMessage(getErrorMessage(error));
@@ -586,65 +592,41 @@ export default function CoachWorkCalendarClient({
   function renderWorkInputFields() {
     return (
       <>
-        <div className="rounded border border-gray-300 bg-gray-50 p-4">
-          <p className="font-bold text-gray-900">指導時間</p>
-
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="min-w-0">
-              <label className="block text-sm font-bold text-gray-900">
-                時間
-              </label>
-              <input
-                name="coaching_hours"
-                type="number"
-                min={0}
-                defaultValue={0}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="min-w-0">
-              <label className="block text-sm font-bold text-gray-900">分</label>
-              <input
-                name="coaching_minutes"
-                type="number"
-                min={0}
-                max={59}
-                defaultValue={0}
-                className={fieldClass}
-              />
-            </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-gray-900">
+              指導時間
+            </label>
+            <input
+              name="coaching_hours"
+              type="number"
+              min={0}
+              step="0.25"
+              defaultValue={0}
+              className={fieldClass}
+              placeholder="例：2 / 1.5"
+            />
+            <p className="mt-1 text-xs font-medium text-gray-700">
+              30分は 0.5、15分は 0.25
+            </p>
           </div>
-        </div>
 
-        <div className="rounded border border-gray-300 bg-gray-50 p-4">
-          <p className="font-bold text-gray-900">事務作業時間</p>
-
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="min-w-0">
-              <label className="block text-sm font-bold text-gray-900">
-                時間
-              </label>
-              <input
-                name="admin_hours"
-                type="number"
-                min={0}
-                defaultValue={0}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="min-w-0">
-              <label className="block text-sm font-bold text-gray-900">分</label>
-              <input
-                name="admin_minutes"
-                type="number"
-                min={0}
-                max={59}
-                defaultValue={0}
-                className={fieldClass}
-              />
-            </div>
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-gray-900">
+              事務作業時間
+            </label>
+            <input
+              name="admin_hours"
+              type="number"
+              min={0}
+              step="0.25"
+              defaultValue={0}
+              className={fieldClass}
+              placeholder="例：1 / 0.5"
+            />
+            <p className="mt-1 text-xs font-medium text-gray-700">
+              30分は 0.5、15分は 0.25
+            </p>
           </div>
         </div>
 
@@ -688,16 +670,48 @@ export default function CoachWorkCalendarClient({
     );
   }
 
+  function renderWorkTimeOnCalendar(
+    coachingTotal: number,
+    adminTotal: number
+  ) {
+    if (coachingTotal === 0 && adminTotal === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-0.5">
+        {coachingTotal > 0 && (
+          <div
+            style={calendarTextStyle(
+              `指:${formatMinutesShort(coachingTotal)}`,
+              "#111827"
+            )}
+          >
+            {`指:${formatMinutesShort(coachingTotal)}`}
+          </div>
+        )}
+
+        {adminTotal > 0 && (
+          <div
+            style={calendarTextStyle(
+              `事:${formatMinutesShort(adminTotal)}`,
+              "#111827"
+            )}
+          >
+            {`事:${formatMinutesShort(adminTotal)}`}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderEventCard(
     event: CalendarEvent,
     coachingTotal: number,
     adminTotal: number
   ) {
     return (
-      <div
-        key={event.id}
-        className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5"
-      >
+      <div key={event.id}>
         <div style={calendarTextStyle(event.title, event.title_color)}>
           {displayText(event.title)}
         </div>
@@ -714,10 +728,7 @@ export default function CoachWorkCalendarClient({
           </div>
         )}
 
-        <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
-          <div>指:{formatMinutesShort(coachingTotal)}</div>
-          <div>事:{formatMinutesShort(adminTotal)}</div>
-        </div>
+        {renderWorkTimeOnCalendar(coachingTotal, adminTotal)}
       </div>
     );
   }
@@ -901,14 +912,15 @@ export default function CoachWorkCalendarClient({
                       renderEventCard(event, coachingTotal, adminTotal)
                     )}
 
-                    {normalEvents.length === 0 && (
-                      <div className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5">
-                        <div className="text-[9px] font-bold leading-tight text-gray-800">
-                          <div>指:{formatMinutesShort(coachingTotal)}</div>
-                          <div>事:{formatMinutesShort(adminTotal)}</div>
+                    {normalEvents.length === 0 &&
+                      (coachingTotal > 0 || adminTotal > 0) && (
+                        <div>
+                          {renderWorkTimeOnCalendar(
+                            coachingTotal,
+                            adminTotal
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {normalEvents.length > 2 && (
                       <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
@@ -1146,55 +1158,33 @@ export default function CoachWorkCalendarClient({
                                 </select>
                               </div>
 
-                              <div className="rounded border border-gray-300 bg-white p-3">
-                                <p className="font-bold text-gray-900">
-                                  指導時間
-                                </p>
-
-                                <div className="mt-2 grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="min-w-0">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    指導時間
+                                  </label>
                                   <input
                                     name="coaching_hours"
                                     type="number"
                                     min={0}
-                                    defaultValue={getHourPart(
-                                      log.coaching_minutes
-                                    )}
-                                    className={fieldClass}
-                                  />
-                                  <input
-                                    name="coaching_minutes"
-                                    type="number"
-                                    min={0}
-                                    max={59}
-                                    defaultValue={getMinutePart(
+                                    step="0.25"
+                                    defaultValue={formatHoursInputValue(
                                       log.coaching_minutes
                                     )}
                                     className={fieldClass}
                                   />
                                 </div>
-                              </div>
 
-                              <div className="rounded border border-gray-300 bg-white p-3">
-                                <p className="font-bold text-gray-900">
-                                  事務作業時間
-                                </p>
-
-                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                <div className="min-w-0">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    事務作業時間
+                                  </label>
                                   <input
                                     name="admin_hours"
                                     type="number"
                                     min={0}
-                                    defaultValue={getHourPart(
-                                      log.admin_minutes
-                                    )}
-                                    className={fieldClass}
-                                  />
-                                  <input
-                                    name="admin_minutes"
-                                    type="number"
-                                    min={0}
-                                    max={59}
-                                    defaultValue={getMinutePart(
+                                    step="0.25"
+                                    defaultValue={formatHoursInputValue(
                                       log.admin_minutes
                                     )}
                                     className={fieldClass}
