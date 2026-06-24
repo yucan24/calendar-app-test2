@@ -10,7 +10,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { updateAdminCalendarAttendance } from "./actions";
+import {
+  updateAdminCalendarAttendance,
+  createAdminCalendarEventsForDates,
+} from "./actions";
 
 type CurrentAdmin = {
   id: string;
@@ -288,6 +291,15 @@ export default function AdminCalendarClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
+  const [bulkCreateTitle, setBulkCreateTitle] = useState("");
+  const [bulkCreateLocation, setBulkCreateLocation] = useState("");
+  const [bulkCreateTimeText, setBulkCreateTimeText] = useState("");
+  const [bulkCreateDescription, setBulkCreateDescription] = useState("");
+  const [bulkCreateAttendanceRequired, setBulkCreateAttendanceRequired] =
+    useState(true);
+  const [bulkCreateIsPeriod, setBulkCreateIsPeriod] = useState(false);
+  const [bulkCreateIsHoliday, setBulkCreateIsHoliday] = useState(false);
+
   const longPressTimerRef = useRef<number | null>(null);
   const dragDateKeysRef = useRef<string[]>([]);
   const captureElementRef = useRef<HTMLElement | null>(null);
@@ -547,6 +559,54 @@ export default function AdminCalendarClient({
         router.refresh();
       } catch {
         setErrorMessage("まとめて保存に失敗しました。通信状態を確認してください。");
+      }
+    });
+  }
+
+  function saveBulkCreateEvents() {
+    setErrorMessage("");
+    setSaveMessage("");
+
+    const dateKeys = uniqueSortedDateKeys(bulkDateKeys);
+
+    if (dateKeys.length === 0) {
+      setErrorMessage("日付が選択されていません。");
+      return;
+    }
+
+    if (!bulkCreateTitle.trim()) {
+      setErrorMessage("予定名を入力してください。");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await createAdminCalendarEventsForDates({
+          dateKeys,
+          title: bulkCreateTitle,
+          description: bulkCreateDescription,
+          location: bulkCreateLocation,
+          timeText: bulkCreateTimeText,
+          isHoliday: bulkCreateIsHoliday,
+          attendanceRequired: bulkCreateAttendanceRequired,
+          isPeriod: bulkCreateIsPeriod,
+          titleColor: "#111827",
+          locationColor: "#111827",
+          timeColor: "#111827",
+        });
+
+        setSaveMessage(`${dateKeys.length}日分の予定を登録しました。`);
+        setBulkCreateTitle("");
+        setBulkCreateLocation("");
+        setBulkCreateTimeText("");
+        setBulkCreateDescription("");
+        setBulkCreateAttendanceRequired(true);
+        setBulkCreateIsPeriod(false);
+        setBulkCreateIsHoliday(false);
+
+        router.refresh();
+      } catch {
+        setErrorMessage("まとめて予定登録に失敗しました。");
       }
     });
   }
@@ -983,7 +1043,7 @@ export default function AdminCalendarClient({
         </p>
 
         <p className="mt-2 text-sm text-gray-700">
-          日付モーダル内の「この日付で予定登録」を押すと、下部の予定登録欄に日付が入ります。
+          複数日選択後のモーダルから、まとめて出欠回答と、まとめて予定登録ができます。
         </p>
 
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
@@ -1019,7 +1079,7 @@ export default function AdminCalendarClient({
                 <p className="text-sm text-gray-600">
                   {bulkDateKeys.length}日分を選択中
                 </p>
-                <h2 className="mt-1 text-xl font-bold">まとめて出欠回答</h2>
+                <h2 className="mt-1 text-xl font-bold">まとめて操作</h2>
               </div>
 
               <button
@@ -1029,11 +1089,6 @@ export default function AdminCalendarClient({
               >
                 ×
               </button>
-            </div>
-
-            <div className="mt-4 rounded bg-yellow-50 p-3 text-sm text-yellow-900">
-              選択した日付内の「出欠回答が必要な予定」にまとめて回答します。
-              出欠不要の予定は一覧には表示しますが、保存対象からは除外します。
             </div>
 
             <div className="mt-4">
@@ -1057,97 +1112,210 @@ export default function AdminCalendarClient({
               </p>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {bulkEvents.length === 0 ? (
-                <p className="rounded bg-gray-50 p-3 text-sm text-gray-600">
-                  選択範囲に予定はありません。
-                </p>
-              ) : (
-                bulkEvents.map(({ dateKey, event }) => {
-                  const currentStatus = localResponses[event.id] ?? "";
+            <section className="mt-5 rounded border bg-white p-4">
+              <h3 className="text-lg font-bold">選択日の予定にまとめて出欠回答</h3>
 
-                  return (
-                    <div
-                      key={`${dateKey}-${event.id}`}
-                      className="rounded border bg-white p-3"
-                    >
-                      <p className="text-xs text-gray-500">
-                        {formatDateLabel(dateKey)}
-                      </p>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <p className="font-bold">{event.title}</p>
-
-                        {event.display_type === "period" && (
-                          <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                            期間予定
-                          </span>
-                        )}
-
-                        {!event.attendance_required && (
-                          <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                            出欠不要
-                          </span>
-                        )}
-
-                        {event.attendance_required && (
-                          <span
-                            className={`rounded px-2 py-1 text-xs font-bold ${statusPillClass(
-                              currentStatus
-                            )}`}
-                          >
-                            {statusLongLabel(currentStatus)}
-                          </span>
-                        )}
-                      </div>
-
-                      {event.time_text && (
-                        <p className="mt-1 text-sm text-gray-700">
-                          時間：{event.time_text}
-                        </p>
-                      )}
-
-                      {event.location && (
-                        <p className="mt-1 text-sm text-gray-700">
-                          場所：{event.location}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-bold">
-                保存対象：{bulkAnswerTargets.length}件
+              <p className="mt-2 text-sm text-gray-600">
+                出欠回答が必要な予定だけが保存対象です。
               </p>
 
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {STATUS_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    disabled={isPending || bulkAnswerTargets.length === 0}
-                    onClick={() => saveBulkAttendance(option.value)}
-                    className="rounded border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-gray-800 disabled:opacity-40"
-                  >
-                    {option.label}
-                  </button>
-                ))}
+              <div className="mt-4 space-y-3">
+                {bulkEvents.length === 0 ? (
+                  <p className="rounded bg-gray-50 p-3 text-sm text-gray-600">
+                    選択範囲に予定はありません。
+                  </p>
+                ) : (
+                  bulkEvents.map(({ dateKey, event }) => {
+                    const currentStatus = localResponses[event.id] ?? "";
+
+                    return (
+                      <div
+                        key={`${dateKey}-${event.id}`}
+                        className="rounded border bg-white p-3"
+                      >
+                        <p className="text-xs text-gray-500">
+                          {formatDateLabel(dateKey)}
+                        </p>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <p className="font-bold">{event.title}</p>
+
+                          {event.display_type === "period" && (
+                            <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
+                              期間予定
+                            </span>
+                          )}
+
+                          {!event.attendance_required && (
+                            <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                              出欠不要
+                            </span>
+                          )}
+
+                          {event.attendance_required && (
+                            <span
+                              className={`rounded px-2 py-1 text-xs font-bold ${statusPillClass(
+                                currentStatus
+                              )}`}
+                            >
+                              {statusLongLabel(currentStatus)}
+                            </span>
+                          )}
+                        </div>
+
+                        {event.time_text && (
+                          <p className="mt-1 text-sm text-gray-700">
+                            時間：{event.time_text}
+                          </p>
+                        )}
+
+                        {event.location && (
+                          <p className="mt-1 text-sm text-gray-700">
+                            場所：{event.location}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
-              <div className="mt-3 min-h-5 text-sm">
-                {isPending && <span className="text-gray-600">保存中...</span>}
+              <div className="mt-5">
+                <p className="text-sm font-bold">
+                  保存対象：{bulkAnswerTargets.length}件
+                </p>
 
-                {!isPending && saveMessage && (
-                  <span className="text-green-700">{saveMessage}</span>
-                )}
-
-                {!isPending && errorMessage && (
-                  <span className="text-red-600">{errorMessage}</span>
-                )}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={isPending || bulkAnswerTargets.length === 0}
+                      onClick={() => saveBulkAttendance(option.value)}
+                      className="rounded border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-gray-800 disabled:opacity-40"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+            </section>
+
+            <section className="mt-5 rounded border bg-white p-4">
+              <h3 className="text-lg font-bold">選択日にまとめて予定登録</h3>
+
+              <p className="mt-2 text-sm text-gray-600">
+                選択中の {bulkDateKeys.length} 日に、同じ予定を追加登録します。
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium">予定名</label>
+                  <input
+                    value={bulkCreateTitle}
+                    onChange={(event) => setBulkCreateTitle(event.target.value)}
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：通常練習 / 試合 / テスト期間"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">場所</label>
+                  <input
+                    value={bulkCreateLocation}
+                    onChange={(event) =>
+                      setBulkCreateLocation(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：第一体育館"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">時間</label>
+                  <input
+                    value={bulkCreateTimeText}
+                    onChange={(event) =>
+                      setBulkCreateTimeText(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="例：AM / PM / 終日 / 9:00-12:00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium">内容</label>
+                  <textarea
+                    value={bulkCreateDescription}
+                    onChange={(event) =>
+                      setBulkCreateDescription(event.target.value)
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2"
+                    placeholder="持ち物、補足など"
+                  />
+                </div>
+
+                <div className="space-y-2 rounded bg-gray-50 p-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkCreateAttendanceRequired}
+                      onChange={(event) =>
+                        setBulkCreateAttendanceRequired(event.target.checked)
+                      }
+                      disabled={bulkCreateIsPeriod}
+                    />
+                    出欠回答を必要にする
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkCreateIsPeriod}
+                      onChange={(event) => {
+                        setBulkCreateIsPeriod(event.target.checked);
+
+                        if (event.target.checked) {
+                          setBulkCreateAttendanceRequired(false);
+                        }
+                      }}
+                    />
+                    期間予定として下部に表示する
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkCreateIsHoliday}
+                      onChange={(event) =>
+                        setBulkCreateIsHoliday(event.target.checked)
+                      }
+                    />
+                    祝日扱いにする
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={saveBulkCreateEvents}
+                  className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-40"
+                >
+                  選択日に予定を登録
+                </button>
+              </div>
+            </section>
+
+            <div className="mt-4 min-h-5 text-sm">
+              {isPending && <span className="text-gray-600">保存中...</span>}
+
+              {!isPending && saveMessage && (
+                <span className="text-green-700">{saveMessage}</span>
+              )}
+
+              {!isPending && errorMessage && (
+                <span className="text-red-600">{errorMessage}</span>
+              )}
             </div>
           </div>
         </div>
