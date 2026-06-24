@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import SubmitButton from "@/components/SubmitButton";
+
 
 type PageProps = {
   searchParams?: Promise<{
@@ -113,10 +115,11 @@ export default async function LoginPage({ searchParams }: PageProps) {
               placeholder="例：1234"
             />
           </div>
-
-          <button className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
+          <SubmitButton
+            pendingText="ログイン中..."
+            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
             ログイン
-          </button>
+          </Submitbutton>
 
           <div className="pt-4 text-center">
             <a
