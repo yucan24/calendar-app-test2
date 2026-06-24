@@ -167,6 +167,7 @@ function visualLength(value: string | null | undefined) {
   let count = 0;
 
   for (const char of Array.from(text)) {
+    // 半角英数字・記号は0.5、全角文字は1として扱う
     count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
   }
 
@@ -184,6 +185,15 @@ function displayText(value: string | null | undefined) {
     .join("\n");
 }
 
+function isTimeLikeText(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+
+  // 9:00-12:00 / 09:00〜12:00 / 18:30-21:00 など
+  return /^\d{1,2}[:：]\d{2}\s*[-ー－〜~]\s*\d{1,2}[:：]\d{2}$/.test(
+    text
+  );
+}
+
 function calendarTextStyle(
   value: string | null | undefined,
   color: string | null | undefined
@@ -191,35 +201,51 @@ function calendarTextStyle(
   const text = displayText(value);
   const length = visualLength(text);
   const hasLineBreak = text.includes("\n");
+  const isTimeText = isTimeLikeText(text);
 
+  // 時間表記は潰さない。
+  // 9:00-12:00 は半角なので visualLength では短く見えるが、
+  // 実際の表示幅は広いため、横圧縮と強い字間詰めを使わない。
+  if (isTimeText) {
+    return {
+      color: color || "#111827",
+      display: "block",
+      width: "100%",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "clip",
+      fontSize: "8.5px",
+      lineHeight: "1.08",
+      letterSpacing: "-0.03em",
+      transform: "none",
+      fontVariantNumeric: "tabular-nums",
+    };
+  }
+
+  // 改行なし・全角5文字以内は1行表示を優先。
   if (!hasLineBreak && length <= 5) {
-    const fontSize =
-      length <= 2.5
-        ? "13px"
-        : length <= 3
-          ? "12px"
-          : length <= 4
-            ? "10.2px"
-            : "8.4px";
+    // 4文字以下はすべて「4文字の時」と同じサイズに統一。
+    // 例：練習 / 試合 / 合同練習 などで文字サイズがバラつかないようにする。
+    const fontSize = length <= 4 ? "10.2px" : "8.6px";
 
-    const letterSpacing =
-      length >= 5 ? "-0.2em" : length >= 4 ? "-0.12em" : "-0.04em";
+    const letterSpacing = length >= 5 ? "-0.14em" : "-0.04em";
 
     return {
       color: color || "#111827",
       display: "block",
       width: "100%",
       whiteSpace: "nowrap",
-      overflow: "visible",
+      overflow: "hidden",
       textOverflow: "clip",
       fontSize,
-      lineHeight: "1.05",
+      lineHeight: "1.08",
       letterSpacing,
-      transform: length >= 5 ? "scaleX(0.94)" : "none",
+      transform: "none",
       transformOrigin: "center",
     };
   }
 
+  // 長い文字だけ最大2行表示
   return {
     color: color || "#111827",
     display: "-webkit-box",
@@ -229,7 +255,7 @@ function calendarTextStyle(
     WebkitBoxOrient: "vertical",
     fontSize: length >= 12 ? "8px" : length >= 8 ? "8.5px" : "9px",
     lineHeight: "1.1",
-    letterSpacing: length >= 10 ? "-0.08em" : "-0.04em",
+    letterSpacing: length >= 10 ? "-0.06em" : "-0.03em",
   };
 }
 
