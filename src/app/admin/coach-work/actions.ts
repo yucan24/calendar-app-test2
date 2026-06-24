@@ -49,6 +49,28 @@ function parseMinutes(
   return hours * 60 + minutes;
 }
 
+function getCoachIds(formData: FormData) {
+  return Array.from(
+    new Set(
+      formData
+        .getAll("coach_ids")
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function getDateKeys(formData: FormData) {
+  return Array.from(
+    new Set(
+      formData
+        .getAll("date_keys")
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  ).sort();
+}
+
 async function assertCoachIdsInAdminGroup(
   coachIds: string[],
   groupId: string
@@ -93,66 +115,69 @@ async function assertCoachWorkLogInAdminGroup(logId: string, groupId: string) {
   }
 }
 
-export async function createCoachWorkLogs(formData: FormData) {
+async function insertCoachWorkRows(input: {
+  formData: FormData;
+  dateKeys: string[];
+}) {
   const admin = await requireAdmin();
 
-  const workDate = cleanText(formData.get("work_date"));
+  const dateKeys = input.dateKeys;
 
-  const coachIds = Array.from(
-    new Set(
-      formData
-        .getAll("coach_ids")
-        .map((value) => String(value).trim())
-        .filter(Boolean)
-    )
-  );
-
-  if (!isValidDate(workDate)) {
-    throw new Error("指導日が不正です");
+  if (dateKeys.length === 0) {
+    throw new Error("日付を1日以上選択してください");
   }
 
+  for (const dateKey of dateKeys) {
+    if (!isValidDate(dateKey)) {
+      throw new Error("日付が不正です");
+    }
+  }
+
+  const coachIds = getCoachIds(input.formData);
   await assertCoachIdsInAdminGroup(coachIds, admin.group_id);
 
   const coachingMinutes = parseMinutes(
-    formData,
+    input.formData,
     "coaching_hours",
     "coaching_minutes",
     "指導時間"
   );
 
   const adminMinutes = parseMinutes(
-    formData,
+    input.formData,
     "admin_hours",
     "admin_minutes",
     "事務作業時間"
   );
 
   const travelExpense = parseNonNegativeInteger(
-    formData.get("travel_expense"),
+    input.formData.get("travel_expense"),
     "交通費"
   );
 
   const otherExpense = parseNonNegativeInteger(
-    formData.get("other_expense"),
+    input.formData.get("other_expense"),
     "その他立替費用"
   );
 
-  const note = cleanText(formData.get("note"));
+  const note = cleanText(input.formData.get("note"));
   const batchId = randomUUID();
 
-  const rows = coachIds.map((coachId) => ({
-    batch_id: batchId,
-    group_id: admin.group_id,
-    coach_id: coachId,
-    entered_by: admin.id,
-    work_date: workDate,
-    coaching_minutes: coachingMinutes,
-    admin_minutes: adminMinutes,
-    travel_expense: travelExpense,
-    other_expense: otherExpense,
-    note,
-    updated_at: new Date().toISOString(),
-  }));
+  const rows = dateKeys.flatMap((dateKey) =>
+    coachIds.map((coachId) => ({
+      batch_id: batchId,
+      group_id: admin.group_id,
+      coach_id: coachId,
+      entered_by: admin.id,
+      work_date: dateKey,
+      coaching_minutes: coachingMinutes,
+      admin_minutes: adminMinutes,
+      travel_expense: travelExpense,
+      other_expense: otherExpense,
+      note,
+      updated_at: new Date().toISOString(),
+    }))
+  );
 
   const { error } = await supabase.from("coach_work_logs").insert(rows);
 
@@ -161,6 +186,24 @@ export async function createCoachWorkLogs(formData: FormData) {
   }
 
   revalidatePath("/admin/coach-work");
+}
+
+export async function createCoachWorkLogs(formData: FormData) {
+  const workDate = cleanText(formData.get("work_date"));
+
+  await insertCoachWorkRows({
+    formData,
+    dateKeys: [workDate],
+  });
+}
+
+export async function createCoachWorkLogsForDates(formData: FormData) {
+  const dateKeys = getDateKeys(formData);
+
+  await insertCoachWorkRows({
+    formData,
+    dateKeys,
+  });
 }
 
 export async function updateCoachWorkLog(formData: FormData) {
@@ -223,6 +266,30 @@ export async function updateCoachWorkLog(formData: FormData) {
       note,
       updated_at: new Date().toISOString(),
     })
+    .eq("id", logId)
+    .eq("group_id", admin.group_id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/admin/coach-work");
+}
+
+export async function deleteCoachWorkLog(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const logId = cleanText(formData.get("log_id"));
+
+  if (!logId) {
+    throw new Error("勤怠記録IDが不明です");
+  }
+
+  await assertCoachWorkLogInAdminGroup(logId, admin.group_id);
+
+  const { error } = await supabase
+    .from("coach_work_logs")
+    .delete()
     .eq("id", logId)
     .eq("group_id", admin.group_id);
 

@@ -1,8 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createCoachWorkLogs, updateCoachWorkLog } from "./actions";
+import {
+  createCoachWorkLogs,
+  createCoachWorkLogsForDates,
+  deleteCoachWorkLog,
+  updateCoachWorkLog,
+} from "./actions";
 import { formatTargetMonth, formatYen } from "@/lib/month";
 
 type Coach = {
@@ -155,7 +161,13 @@ function getMinutePart(value: number) {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  return "保存に失敗しました";
+  return "処理に失敗しました";
+}
+
+function addDateToSet(set: Set<string>, dateKey: string) {
+  const next = new Set(set);
+  next.add(dateKey);
+  return next;
 }
 
 export default function CoachWorkCalendarClient({
@@ -169,9 +181,21 @@ export default function CoachWorkCalendarClient({
   logs,
 }: Props) {
   const router = useRouter();
+
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [selectedDateKeys, setSelectedDateKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const longPressTimerRef = useRef<number | null>(null);
+  const pointerDownDateRef = useRef<string | null>(null);
+  const didLongPressRef = useRef(false);
+  const movedTooMuchRef = useRef(false);
+  const startPointRef = useRef<{ x: number; y: number } | null>(null);
 
   const coachNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -238,9 +262,114 @@ export default function CoachWorkCalendarClient({
     ? logsByDate.get(selectedDateKey) ?? []
     : [];
 
-  function closeModal() {
+  const selectedDateKeyList = Array.from(selectedDateKeys).sort();
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function resetPointerState() {
+    clearLongPressTimer();
+    pointerDownDateRef.current = null;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = null;
+    setIsSelectionActive(false);
+  }
+
+  function closeSingleModal() {
     setSelectedDateKey(null);
     setErrorMessage("");
+  }
+
+  function closeBulkModal() {
+    setIsBulkModalOpen(false);
+    setSelectedDateKeys(new Set());
+    setErrorMessage("");
+  }
+
+  function getDateKeyFromPoint(clientX: number, clientY: number) {
+    const element = document.elementFromPoint(clientX, clientY);
+    const dateElement = element?.closest("[data-date-key]") as HTMLElement | null;
+    return dateElement?.dataset.dateKey ?? null;
+  }
+
+  function handlePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    dateKey: string
+  ) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    setErrorMessage("");
+    clearLongPressTimer();
+
+    pointerDownDateRef.current = dateKey;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      didLongPressRef.current = true;
+      setIsSelectionActive(true);
+      setSelectedDateKeys(new Set([dateKey]));
+    }, 450);
+  }
+
+  function handleCalendarPointerMove(
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const startPoint = startPointRef.current;
+
+    if (!startPoint || !pointerDownDateRef.current) return;
+
+    const diffX = Math.abs(event.clientX - startPoint.x);
+    const diffY = Math.abs(event.clientY - startPoint.y);
+
+    if (!didLongPressRef.current && diffX + diffY > 12) {
+      movedTooMuchRef.current = true;
+      clearLongPressTimer();
+      return;
+    }
+
+    if (!didLongPressRef.current) return;
+
+    event.preventDefault();
+
+    const dateKey = getDateKeyFromPoint(event.clientX, event.clientY);
+
+    if (!dateKey) return;
+
+    setSelectedDateKeys((current) => addDateToSet(current, dateKey));
+  }
+
+  function handleCalendarPointerUp() {
+    const dateKey = pointerDownDateRef.current;
+    const didLongPress = didLongPressRef.current;
+    const movedTooMuch = movedTooMuchRef.current;
+
+    clearLongPressTimer();
+
+    if (didLongPress) {
+      setIsBulkModalOpen(true);
+    } else if (dateKey && !movedTooMuch) {
+      setSelectedDateKey(dateKey);
+    }
+
+    pointerDownDateRef.current = null;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = null;
+    setIsSelectionActive(false);
+  }
+
+  function handleCalendarPointerCancel() {
+    resetPointerState();
   }
 
   function handleCreate(formData: FormData) {
@@ -249,7 +378,21 @@ export default function CoachWorkCalendarClient({
     startTransition(async () => {
       try {
         await createCoachWorkLogs(formData);
-        closeModal();
+        closeSingleModal();
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    });
+  }
+
+  function handleBulkCreate(formData: FormData) {
+    setErrorMessage("");
+
+    startTransition(async () => {
+      try {
+        await createCoachWorkLogsForDates(formData);
+        closeBulkModal();
         router.refresh();
       } catch (error) {
         setErrorMessage(getErrorMessage(error));
@@ -263,12 +406,151 @@ export default function CoachWorkCalendarClient({
     startTransition(async () => {
       try {
         await updateCoachWorkLog(formData);
-        closeModal();
+        closeSingleModal();
         router.refresh();
       } catch (error) {
         setErrorMessage(getErrorMessage(error));
       }
     });
+  }
+
+  function handleDelete(formData: FormData) {
+    setErrorMessage("");
+
+    startTransition(async () => {
+      try {
+        await deleteCoachWorkLog(formData);
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    });
+  }
+
+  function renderCoachCheckboxes() {
+    return (
+      <div className="mt-3 grid gap-2">
+        {coaches.map((coach) => (
+          <label
+            key={coach.id}
+            className="flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900"
+          >
+            <input
+              name="coach_ids"
+              type="checkbox"
+              value={coach.id}
+              defaultChecked={coach.id === currentAdmin.id}
+            />
+            {coach.name}
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  function renderWorkInputFields() {
+    return (
+      <>
+        <div className="rounded border border-gray-300 bg-gray-50 p-4">
+          <p className="font-bold text-gray-900">指導時間</p>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">
+                時間
+              </label>
+              <input
+                name="coaching_hours"
+                type="number"
+                min={0}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">分</label>
+              <input
+                name="coaching_minutes"
+                type="number"
+                min={0}
+                max={59}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded border border-gray-300 bg-gray-50 p-4">
+          <p className="font-bold text-gray-900">事務作業時間</p>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">
+                時間
+              </label>
+              <input
+                name="admin_hours"
+                type="number"
+                min={0}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="block text-sm font-bold text-gray-900">分</label>
+              <input
+                name="admin_minutes"
+                type="number"
+                min={0}
+                max={59}
+                defaultValue={0}
+                className={fieldClass}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-gray-900">
+              交通費
+            </label>
+            <input
+              name="travel_expense"
+              type="number"
+              min={0}
+              defaultValue={0}
+              className={fieldClass}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-gray-900">
+              その他立替
+            </label>
+            <input
+              name="other_expense"
+              type="number"
+              min={0}
+              defaultValue={0}
+              className={fieldClass}
+            />
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <label className="block text-sm font-bold text-gray-900">備考</label>
+          <textarea
+            name="note"
+            className={fieldClass}
+            placeholder="例：交通費内訳、立替内容、代理入力など"
+          />
+        </div>
+      </>
+    );
   }
 
   return (
@@ -280,7 +562,7 @@ export default function CoachWorkCalendarClient({
               指導者勤怠・立替管理
             </h1>
             <p className="mt-2 text-sm font-medium text-gray-700">
-              カレンダーの日付をタップして、指導時間・事務作業時間・立替費用を入力します。
+              日付タップで入力、長押しドラッグで複数日にまとめて入力できます。
             </p>
           </div>
 
@@ -326,6 +608,102 @@ export default function CoachWorkCalendarClient({
                 翌月
               </a>
             </div>
+          </div>
+        </section>
+
+        <section
+          className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          onPointerMove={handleCalendarPointerMove}
+          onPointerUp={handleCalendarPointerUp}
+          onPointerCancel={handleCalendarPointerCancel}
+          style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
+        >
+          <div className="grid grid-cols-7 gap-px bg-gray-300">
+            {weekLabels.map((label, index) => (
+              <div
+                key={label}
+                className={
+                  index === 5
+                    ? "bg-blue-50 py-2 text-center text-sm font-bold text-blue-700"
+                    : index === 6
+                      ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
+                      : "bg-white py-2 text-center text-sm font-bold text-gray-900"
+                }
+              >
+                {label}
+              </div>
+            ))}
+
+            {cells.map((cell) => {
+              const dayLogs = logsByDate.get(cell.dateKey) ?? [];
+              const coachingTotal = dayLogs.reduce(
+                (sum, log) => sum + log.coaching_minutes,
+                0
+              );
+              const adminTotal = dayLogs.reduce(
+                (sum, log) => sum + log.admin_minutes,
+                0
+              );
+              const expenseTotal = dayLogs.reduce(
+                (sum, log) => sum + log.travel_expense + log.other_expense,
+                0
+              );
+
+              const isToday = cell.dateKey === todayKey;
+              const isSelected = selectedDateKeys.has(cell.dateKey);
+
+              return (
+                <button
+                  key={cell.dateKey}
+                  type="button"
+                  data-date-key={cell.dateKey}
+                  onPointerDown={(event) =>
+                    handlePointerDown(event, cell.dateKey)
+                  }
+                  className={
+                    cell.isCurrentMonth
+                      ? "min-h-28 bg-white p-1 text-left align-top"
+                      : "min-h-28 bg-gray-100 p-1 text-left align-top text-gray-400"
+                  }
+                  style={
+                    isSelected
+                      ? { boxShadow: "inset 0 0 0 2px #facc15" }
+                      : undefined
+                  }
+                >
+                  <div
+                    className={
+                      isToday
+                        ? "inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold text-gray-900"
+                        : "inline-flex h-7 w-7 items-center justify-center text-sm font-bold"
+                    }
+                  >
+                    {cell.day}
+                  </div>
+
+                  {dayLogs.length > 0 && (
+                    <div className="mt-1 space-y-1 text-[10px] font-bold leading-tight">
+                      <div className="rounded bg-blue-50 px-1 py-0.5 text-blue-800">
+                        {dayLogs.length}件
+                      </div>
+                      <div className="rounded bg-gray-50 px-1 py-0.5 text-gray-800">
+                        指 {formatMinutesShort(coachingTotal)}
+                      </div>
+                      {adminTotal > 0 && (
+                        <div className="rounded bg-purple-50 px-1 py-0.5 text-purple-800">
+                          事 {formatMinutesShort(adminTotal)}
+                        </div>
+                      )}
+                      {expenseTotal > 0 && (
+                        <div className="rounded bg-red-50 px-1 py-0.5 text-red-800">
+                          立 {formatYen(expenseTotal)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -382,90 +760,6 @@ export default function CoachWorkCalendarClient({
             })}
           </div>
         </section>
-
-        <section className="mt-5 overflow-hidden rounded-lg bg-gray-300 shadow">
-          <div className="grid grid-cols-7 gap-px bg-gray-300">
-            {weekLabels.map((label, index) => (
-              <div
-                key={label}
-                className={
-                  index === 5
-                    ? "bg-blue-50 py-2 text-center text-sm font-bold text-blue-700"
-                    : index === 6
-                    ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
-                    : "bg-white py-2 text-center text-sm font-bold text-gray-900"
-                }
-              >
-                {label}
-              </div>
-            ))}
-
-            {cells.map((cell) => {
-              const dayLogs = logsByDate.get(cell.dateKey) ?? [];
-              const coachingTotal = dayLogs.reduce(
-                (sum, log) => sum + log.coaching_minutes,
-                0
-              );
-              const adminTotal = dayLogs.reduce(
-                (sum, log) => sum + log.admin_minutes,
-                0
-              );
-              const expenseTotal = dayLogs.reduce(
-                (sum, log) => sum + log.travel_expense + log.other_expense,
-                0
-              );
-
-              const isToday = cell.dateKey === todayKey;
-
-              return (
-                <button
-                  key={cell.dateKey}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDateKey(cell.dateKey);
-                    setErrorMessage("");
-                  }}
-                  className={
-                    cell.isCurrentMonth
-                      ? "min-h-28 bg-white p-1 text-left align-top"
-                      : "min-h-28 bg-gray-100 p-1 text-left align-top text-gray-400"
-                  }
-                >
-                  <div
-                    className={
-                      isToday
-                        ? "inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold text-gray-900"
-                        : "inline-flex h-7 w-7 items-center justify-center text-sm font-bold"
-                    }
-                  >
-                    {cell.day}
-                  </div>
-
-                  {dayLogs.length > 0 && (
-                    <div className="mt-1 space-y-1 text-[10px] font-bold leading-tight">
-                      <div className="rounded bg-blue-50 px-1 py-0.5 text-blue-800">
-                        {dayLogs.length}件
-                      </div>
-                      <div className="rounded bg-gray-50 px-1 py-0.5 text-gray-800">
-                        指 {formatMinutesShort(coachingTotal)}
-                      </div>
-                      {adminTotal > 0 && (
-                        <div className="rounded bg-purple-50 px-1 py-0.5 text-purple-800">
-                          事 {formatMinutesShort(adminTotal)}
-                        </div>
-                      )}
-                      {expenseTotal > 0 && (
-                        <div className="rounded bg-red-50 px-1 py-0.5 text-red-800">
-                          立 {formatYen(expenseTotal)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
       </div>
 
       {selectedDateKey && (
@@ -483,7 +777,7 @@ export default function CoachWorkCalendarClient({
 
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={closeSingleModal}
                 className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
               >
                 ×
@@ -499,132 +793,14 @@ export default function CoachWorkCalendarClient({
             <form action={handleCreate} className="mt-5 space-y-4">
               <input type="hidden" name="work_date" value={selectedDateKey} />
 
-              <div className="rounded border border-gray-300 bg-gray-50 p-4">
-                <p className="font-bold text-gray-900">指導時間</p>
-
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div className="min-w-0">
-                    <label className="block text-sm font-bold text-gray-900">
-                      時間
-                    </label>
-                    <input
-                      name="coaching_hours"
-                      type="number"
-                      min={0}
-                      defaultValue={0}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="min-w-0">
-                    <label className="block text-sm font-bold text-gray-900">
-                      分
-                    </label>
-                    <input
-                      name="coaching_minutes"
-                      type="number"
-                      min={0}
-                      max={59}
-                      defaultValue={0}
-                      className={fieldClass}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded border border-gray-300 bg-gray-50 p-4">
-                <p className="font-bold text-gray-900">事務作業時間</p>
-
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div className="min-w-0">
-                    <label className="block text-sm font-bold text-gray-900">
-                      時間
-                    </label>
-                    <input
-                      name="admin_hours"
-                      type="number"
-                      min={0}
-                      defaultValue={0}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="min-w-0">
-                    <label className="block text-sm font-bold text-gray-900">
-                      分
-                    </label>
-                    <input
-                      name="admin_minutes"
-                      type="number"
-                      min={0}
-                      max={59}
-                      defaultValue={0}
-                      className={fieldClass}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="min-w-0">
-                  <label className="block text-sm font-bold text-gray-900">
-                    交通費
-                  </label>
-                  <input
-                    name="travel_expense"
-                    type="number"
-                    min={0}
-                    defaultValue={0}
-                    className={fieldClass}
-                  />
-                </div>
-
-                <div className="min-w-0">
-                  <label className="block text-sm font-bold text-gray-900">
-                    その他立替
-                  </label>
-                  <input
-                    name="other_expense"
-                    type="number"
-                    min={0}
-                    defaultValue={0}
-                    className={fieldClass}
-                  />
-                </div>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  備考
-                </label>
-                <textarea
-                  name="note"
-                  className={fieldClass}
-                  placeholder="例：交通費内訳、立替内容、代理入力など"
-                />
-              </div>
+              {renderWorkInputFields()}
 
               <details className="rounded border border-gray-300 bg-gray-50 p-4">
                 <summary className="cursor-pointer font-bold text-gray-900">
                   詳細設定：他の指導者も追加
                 </summary>
 
-                <div className="mt-3 grid gap-2">
-                  {coaches.map((coach) => (
-                    <label
-                      key={coach.id}
-                      className="flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900"
-                    >
-                      <input
-                        name="coach_ids"
-                        type="checkbox"
-                        value={coach.id}
-                        defaultChecked={coach.id === currentAdmin.id}
-                      />
-                      {coach.name}
-                    </label>
-                  ))}
-                </div>
+                {renderCoachCheckboxes()}
               </details>
 
               <button
@@ -700,132 +876,219 @@ export default function CoachWorkCalendarClient({
                           </p>
                         )}
 
-                        <details className="mt-4 rounded bg-gray-50 p-3">
-                          <summary className="cursor-pointer font-bold text-gray-900">
-                            この記録を修正
-                          </summary>
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <details className="rounded bg-gray-50 p-3">
+                            <summary className="cursor-pointer font-bold text-gray-900">
+                              修正
+                            </summary>
 
-                          <form action={handleUpdate} className="mt-3 space-y-3">
-                            <input
-                              type="hidden"
-                              name="log_id"
-                              value={log.id}
-                            />
+                            <form
+                              action={handleUpdate}
+                              className="mt-3 space-y-3"
+                            >
+                              <input
+                                type="hidden"
+                                name="log_id"
+                                value={log.id}
+                              />
 
-                            <input
-                              type="hidden"
-                              name="work_date"
-                              value={selectedDateKey}
-                            />
+                              <input
+                                type="hidden"
+                                name="work_date"
+                                value={selectedDateKey}
+                              />
 
-                            <div className="min-w-0">
-                              <label className="block text-sm font-bold text-gray-900">
-                                対象指導者
-                              </label>
-                              <select
-                                name="coach_id"
-                                defaultValue={log.coach_id}
+                              <div className="min-w-0">
+                                <label className="block text-sm font-bold text-gray-900">
+                                  対象指導者
+                                </label>
+                                <select
+                                  name="coach_id"
+                                  defaultValue={log.coach_id}
+                                  className={fieldClass}
+                                >
+                                  {coaches.map((coach) => (
+                                    <option key={coach.id} value={coach.id}>
+                                      {coach.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="rounded border border-gray-300 bg-white p-3">
+                                <p className="font-bold text-gray-900">
+                                  指導時間
+                                </p>
+
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  <input
+                                    name="coaching_hours"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={getHourPart(
+                                      log.coaching_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                  <input
+                                    name="coaching_minutes"
+                                    type="number"
+                                    min={0}
+                                    max={59}
+                                    defaultValue={getMinutePart(
+                                      log.coaching_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="rounded border border-gray-300 bg-white p-3">
+                                <p className="font-bold text-gray-900">
+                                  事務作業時間
+                                </p>
+
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  <input
+                                    name="admin_hours"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={getHourPart(
+                                      log.admin_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                  <input
+                                    name="admin_minutes"
+                                    type="number"
+                                    min={0}
+                                    max={59}
+                                    defaultValue={getMinutePart(
+                                      log.admin_minutes
+                                    )}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  name="travel_expense"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={log.travel_expense}
+                                  className={fieldClass}
+                                />
+                                <input
+                                  name="other_expense"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={log.other_expense}
+                                  className={fieldClass}
+                                />
+                              </div>
+
+                              <textarea
+                                name="note"
+                                defaultValue={log.note ?? ""}
                                 className={fieldClass}
+                              />
+
+                              <button
+                                disabled={isPending}
+                                className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
                               >
-                                {coaches.map((coach) => (
-                                  <option key={coach.id} value={coach.id}>
-                                    {coach.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                                修正
+                              </button>
+                            </form>
+                          </details>
 
-                            <div className="rounded border border-gray-300 bg-white p-3">
-                              <p className="font-bold text-gray-900">
-                                指導時間
-                              </p>
-
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                <input
-                                  name="coaching_hours"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={getHourPart(
-                                    log.coaching_minutes
-                                  )}
-                                  className={fieldClass}
-                                />
-                                <input
-                                  name="coaching_minutes"
-                                  type="number"
-                                  min={0}
-                                  max={59}
-                                  defaultValue={getMinutePart(
-                                    log.coaching_minutes
-                                  )}
-                                  className={fieldClass}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="rounded border border-gray-300 bg-white p-3">
-                              <p className="font-bold text-gray-900">
-                                事務作業時間
-                              </p>
-
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                <input
-                                  name="admin_hours"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={getHourPart(log.admin_minutes)}
-                                  className={fieldClass}
-                                />
-                                <input
-                                  name="admin_minutes"
-                                  type="number"
-                                  min={0}
-                                  max={59}
-                                  defaultValue={getMinutePart(
-                                    log.admin_minutes
-                                  )}
-                                  className={fieldClass}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <input
-                                name="travel_expense"
-                                type="number"
-                                min={0}
-                                defaultValue={log.travel_expense}
-                                className={fieldClass}
-                              />
-                              <input
-                                name="other_expense"
-                                type="number"
-                                min={0}
-                                defaultValue={log.other_expense}
-                                className={fieldClass}
-                              />
-                            </div>
-
-                            <textarea
-                              name="note"
-                              defaultValue={log.note ?? ""}
-                              className={fieldClass}
-                            />
-
+                          <form
+                            action={handleDelete}
+                            onSubmit={(event) => {
+                              if (!window.confirm("この勤怠記録を削除しますか？")) {
+                                event.preventDefault();
+                              }
+                            }}
+                          >
+                            <input type="hidden" name="log_id" value={log.id} />
                             <button
                               disabled={isPending}
-                              className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
+                              className="h-full w-full rounded bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-50"
                             >
-                              修正
+                              削除
                             </button>
                           </form>
-                        </details>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  まとめて勤怠入力
+                </h2>
+                <p className="mt-1 text-sm font-medium text-gray-700">
+                  選択日数：{selectedDateKeyList.length}日
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeBulkModal}
+                className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
+              >
+                ×
+              </button>
+            </div>
+
+            {errorMessage && (
+              <div className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
+                {errorMessage}
+              </div>
+            )}
+
+            <div className="mt-4 max-h-28 overflow-y-auto rounded bg-gray-50 p-3 text-sm font-bold text-gray-900">
+              {selectedDateKeyList.map((dateKey) => (
+                <div key={dateKey}>{formatDate(dateKey)}</div>
+              ))}
+            </div>
+
+            <form action={handleBulkCreate} className="mt-5 space-y-4">
+              {selectedDateKeyList.map((dateKey) => (
+                <input key={dateKey} type="hidden" name="date_keys" value={dateKey} />
+              ))}
+
+              {renderWorkInputFields()}
+
+              <details
+                open
+                className="rounded border border-gray-300 bg-gray-50 p-4"
+              >
+                <summary className="cursor-pointer font-bold text-gray-900">
+                  対象指導者
+                </summary>
+
+                {renderCoachCheckboxes()}
+              </details>
+
+              <button
+                disabled={isPending}
+                className="w-full rounded bg-black px-4 py-3 font-bold text-white disabled:opacity-50"
+              >
+                選択日にまとめて保存
+              </button>
+            </form>
           </div>
         </div>
       )}
