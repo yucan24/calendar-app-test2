@@ -700,25 +700,29 @@ export default function CoachWorkCalendarClient({
     );
   }
 
-  function renderWorkTimeOnCalendar(
-    coachingTotal: number,
-    adminTotal: number
-  ) {
-    if (coachingTotal === 0 && adminTotal === 0) {
+  function renderWorkTimeOnCalendar(input: {
+    myCoachingTotal: number;
+    allCoachingTotal: number;
+    myAdminTotal: number;
+    allAdminTotal: number;
+  }) {
+    if (input.allCoachingTotal === 0 && input.allAdminTotal === 0) {
       return null;
     }
 
     return (
       <div className="mt-1 space-y-0.5">
-        {coachingTotal > 0 && (
+        {input.allCoachingTotal > 0 && (
           <div className="rounded bg-blue-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-blue-800">
-            指:{formatHoursShort(coachingTotal)}
+            指:{formatHoursShort(input.myCoachingTotal)}(全
+            {formatHoursShort(input.allCoachingTotal)})
           </div>
         )}
 
-        {adminTotal > 0 && (
+        {input.allAdminTotal > 0 && (
           <div className="rounded bg-purple-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-purple-800">
-            事:{formatHoursShort(adminTotal)}
+            事:{formatHoursShort(input.myAdminTotal)}(全
+            {formatHoursShort(input.allAdminTotal)})
           </div>
         )}
       </div>
@@ -880,11 +884,24 @@ export default function CoachWorkCalendarClient({
                 (event) => event.display_type === "period"
               );
 
-              const coachingTotal = dayLogs.reduce(
+              const allCoachingTotal = dayLogs.reduce(
                 (sum, log) => sum + log.coaching_minutes,
                 0
               );
-              const adminTotal = dayLogs.reduce(
+              const allAdminTotal = dayLogs.reduce(
+                (sum, log) => sum + log.admin_minutes,
+                0
+              );
+
+              const myLogs = dayLogs.filter(
+                (log) => log.coach_id === currentAdmin.id
+              );
+
+              const myCoachingTotal = myLogs.reduce(
+                (sum, log) => sum + log.coaching_minutes,
+                0
+              );
+              const myAdminTotal = myLogs.reduce(
                 (sum, log) => sum + log.admin_minutes,
                 0
               );
@@ -944,7 +961,12 @@ export default function CoachWorkCalendarClient({
                       </div>
                     )}
 
-                    {renderWorkTimeOnCalendar(coachingTotal, adminTotal)}
+                    {renderWorkTimeOnCalendar({
+                      myCoachingTotal,
+                      allCoachingTotal,
+                      myAdminTotal,
+                      allAdminTotal,
+                    })}
                   </div>
 
                   <div className="mt-auto space-y-1 pt-1">
