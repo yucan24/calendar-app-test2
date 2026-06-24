@@ -1,389 +1,576 @@
-import { revalidatePath } from "next/cache";
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import {
+  createBillingItem,
+  createTuitionForAllUsers,
+  updateBillingItemStatus,
+} from "./actions";
+import {
+  formatTargetMonth,
+  formatYen,
+  getCurrentTargetMonth,
+  getNextTargetMonth,
+  getPrevTargetMonth,
+  isValidTargetMonth,
+} from "@/lib/month";
+
+type PageProps = {
+  searchParams?: Promise<{
+    month?: string;
+  }>;
+};
 
 type Profile = {
   id: string;
   name: string;
   email: string;
   role: "admin" | "user";
-  is_approved: boolean;
-  is_active: boolean;
-  created_at: string;
 };
 
-async function approveUser(formData: FormData) {
-  "use server";
+type BillingItem = {
+  id: string;
+  user_id: string;
+  target_month: string;
+  category: string;
+  title: string;
+  amount: number;
+  status: string;
+  due_date: string | null;
+  note: string | null;
+  paid_at: string | null;
+};
 
-  const currentAdmin = await requireAdmin();
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("対象ユーザーが不明です");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      is_approved: true,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("group_id", currentAdmin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/users");
+function categoryLabel(category: string) {
+  if (category === "tuition") return "月謝";
+  if (category === "trip") return "遠征費";
+  if (category === "event") return "大会・イベント費";
+  if (category === "uniform") return "ユニフォーム代";
+  return "その他";
 }
 
-async function disableLogin(formData: FormData) {
-  "use server";
-
-  const currentAdmin = await requireAdmin();
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("対象ユーザーが不明です");
-  }
-
-  if (id === currentAdmin.id) {
-    throw new Error("自分自身をログイン不可にはできません");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      is_active: false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("group_id", currentAdmin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/users");
+function statusLabel(status: string) {
+  if (status === "paid") return "支払い済み";
+  if (status === "exempt") return "免除";
+  return "未払い";
 }
 
-async function enableLogin(formData: FormData) {
-  "use server";
-
-  const currentAdmin = await requireAdmin();
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("対象ユーザーが不明です");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      is_active: true,
-      is_approved: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("group_id", currentAdmin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/users");
+function statusClass(status: string) {
+  if (status === "paid") return "bg-green-100 text-green-800";
+  if (status === "exempt") return "bg-gray-100 text-gray-700";
+  return "bg-red-100 text-red-800";
 }
 
-async function grantAdmin(formData: FormData) {
-  "use server";
+function buildReminderMailto(unpaidUsers: Profile[]) {
+  const emails = unpaidUsers
+    .map((user) => user.email)
+    .filter(Boolean)
+    .join(",");
 
-  const currentAdmin = await requireAdmin();
-  const id = String(formData.get("id"));
+  const subject = "未払い項目のご確認";
+  const body = [
+    "未払い項目があります。",
+    "",
+    "アプリにログインし、未払い金額と内訳をご確認ください。",
+    "",
+    "行き違いでお支払い済みの場合はご容赦ください。",
+  ].join("\n");
 
-  if (!id) {
-    throw new Error("対象ユーザーが不明です");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      role: "admin",
-      is_approved: true,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("group_id", currentAdmin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/users");
+  return `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
 }
 
-async function revokeAdmin(formData: FormData) {
-  "use server";
-
-  const currentAdmin = await requireAdmin();
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("対象ユーザーが不明です");
-  }
-
-  if (id === currentAdmin.id) {
-    throw new Error("自分自身の管理者権限は削除できません");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      role: "user",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("group_id", currentAdmin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/users");
-}
-
-function statusLabel(profile: Profile) {
-  if (!profile.is_active) return "ログイン不可";
-  if (!profile.is_approved) return "承認待ち";
-  return "ログイン可能";
-}
-
-function statusClass(profile: Profile) {
-  if (!profile.is_active) return "bg-red-100 text-red-800";
-  if (!profile.is_approved) return "bg-yellow-100 text-yellow-800";
-  return "bg-green-100 text-green-800";
-}
-
-function roleLabel(profile: Profile) {
-  return profile.role === "admin" ? "管理者" : "一般";
-}
-
-function roleClass(profile: Profile) {
-  return profile.role === "admin"
-    ? "rounded bg-black px-2 py-1 text-xs text-white"
-    : "rounded bg-gray-100 px-2 py-1 text-xs text-gray-600";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "medium",
-    timeZone: "Asia/Tokyo",
-  }).format(new Date(value));
-}
-
-export default async function AdminUsersPage() {
+export default async function AdminUsersPage({ searchParams }: PageProps) {
   const admin = await requireAdmin();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
-  const { data: profiles, error } = await supabase
+  const currentMonth = getCurrentTargetMonth();
+
+  const targetMonth =
+    resolvedSearchParams?.month && isValidTargetMonth(resolvedSearchParams.month)
+      ? resolvedSearchParams.month
+      : currentMonth;
+
+  const prevMonth = getPrevTargetMonth(targetMonth);
+  const nextMonth = getNextTargetMonth(targetMonth);
+
+  const { data: users, error: usersError } = await supabase
     .from("profiles")
-    .select("id, name, email, role, is_approved, is_active, created_at")
+    .select("id, name, email, role")
     .eq("group_id", admin.group_id)
-    .order("is_approved", { ascending: true })
-    .order("is_active", { ascending: false })
-    .order("created_at", { ascending: false });
+    .eq("role", "user")
+    .order("name", { ascending: true });
 
-  if (error) {
-    return (
-      <main className="min-h-screen bg-gray-50 p-8">
-        <div className="mx-auto max-w-6xl">
-          <h1 className="text-2xl font-bold">会員管理</h1>
-
-          <p className="mt-6 rounded bg-red-100 p-4 text-red-700">
-            会員取得エラー：{error.message}
-          </p>
-
-          <a
-            href="/admin"
-            className="mt-6 inline-block rounded border bg-white px-4 py-2"
-          >
-            管理者画面に戻る
-          </a>
-        </div>
-      </main>
-    );
+  if (usersError) {
+    throw new Error(usersError.message);
   }
 
-  const profileList = (profiles ?? []) as Profile[];
+  const userList = (users ?? []) as Profile[];
+  const userIds = userList.map((user) => user.id);
 
-  const pendingProfiles = profileList.filter(
-    (profile) => !profile.is_approved && profile.is_active
-  );
+  const { data: billingItems, error: billingError } =
+    userIds.length > 0
+      ? await supabase
+          .from("billing_items")
+          .select(
+            "id, user_id, target_month, category, title, amount, status, due_date, note, paid_at"
+          )
+          .eq("group_id", admin.group_id)
+          .in("user_id", userIds)
+          .order("target_month", { ascending: false })
+          .order("created_at", { ascending: false })
+      : { data: [], error: null };
 
-  const activeProfiles = profileList.filter(
-    (profile) => profile.is_approved && profile.is_active
-  );
+  if (billingError) {
+    throw new Error(billingError.message);
+  }
 
-  const disabledProfiles = profileList.filter((profile) => !profile.is_active);
+  const itemList = (billingItems ?? []) as BillingItem[];
 
-  const adminProfiles = profileList.filter(
-    (profile) => profile.role === "admin" && profile.is_active
-  );
+  const itemsByUser = new Map<string, BillingItem[]>();
+
+  for (const user of userList) {
+    itemsByUser.set(user.id, []);
+  }
+
+  for (const item of itemList) {
+    const list = itemsByUser.get(item.user_id) ?? [];
+    list.push(item);
+    itemsByUser.set(item.user_id, list);
+  }
+
+  const unpaidUsers = userList.filter((user) => {
+    const items = itemsByUser.get(user.id) ?? [];
+    return items.some((item) => item.status === "unpaid" && item.amount > 0);
+  });
+
+  const reminderHref = buildReminderMailto(unpaidUsers);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">会員管理</h1>
+            <h1 className="text-2xl font-bold">ユーザー・請求管理</h1>
             <p className="mt-2 text-sm text-gray-600">
-              会員承認、ログイン停止、管理者権限の付与・削除を行います。
-            </p>
-            <p className="mt-1 text-sm text-gray-600">
-              {admin.name} さんでログイン中
+              月謝、遠征費、その他費用の未払い状況を管理します。
             </p>
           </div>
 
-          <a href="/admin" className="rounded border bg-white px-4 py-2">
-            管理者画面に戻る
-          </a>
+          <div className="flex gap-2">
+            <a href="/admin" className="rounded border bg-white px-4 py-2">
+              管理者画面に戻る
+            </a>
+            <a href="/logout" className="rounded border bg-white px-4 py-2">
+              ログアウト
+            </a>
+          </div>
         </div>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-4">
-          <div className="rounded-lg bg-white p-5 shadow">
-            <p className="text-sm text-gray-500">承認待ち</p>
-            <p className="mt-2 text-3xl font-bold">{pendingProfiles.length}</p>
-          </div>
+        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">
+                対象月：{formatTargetMonth(targetMonth)}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                今月の月謝未払いと、全期間の未払い合計を表示します。
+              </p>
+            </div>
 
-          <div className="rounded-lg bg-white p-5 shadow">
-            <p className="text-sm text-gray-500">ログイン可能</p>
-            <p className="mt-2 text-3xl font-bold">{activeProfiles.length}</p>
-          </div>
-
-          <div className="rounded-lg bg-white p-5 shadow">
-            <p className="text-sm text-gray-500">ログイン不可</p>
-            <p className="mt-2 text-3xl font-bold">
-              {disabledProfiles.length}
-            </p>
-          </div>
-
-          <div className="rounded-lg bg-white p-5 shadow">
-            <p className="text-sm text-gray-500">管理者</p>
-            <p className="mt-2 text-3xl font-bold">{adminProfiles.length}</p>
+            <div className="flex gap-2">
+              <a
+                href={`/admin/users?month=${prevMonth}`}
+                className="rounded border bg-white px-4 py-2"
+              >
+                前月
+              </a>
+              <a
+                href={`/admin/users?month=${currentMonth}`}
+                className="rounded border bg-white px-4 py-2"
+              >
+                今月
+              </a>
+              <a
+                href={`/admin/users?month=${nextMonth}`}
+                className="rounded border bg-white px-4 py-2"
+              >
+                翌月
+              </a>
+            </div>
           </div>
         </section>
 
-        <section className="mt-8 rounded-lg bg-white p-6 shadow">
-          <h2 className="text-lg font-bold">会員一覧</h2>
+        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+          <h2 className="text-lg font-bold">月謝を一括作成</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            対象月に月謝がまだ登録されていないユーザーへ、一括で月謝を作成します。
+          </p>
 
-          <div className="mt-4 space-y-4">
-            {profileList.map((profile) => {
-              const isSelf = profile.id === admin.id;
+          <form action={createTuitionForAllUsers} className="mt-4 grid gap-3 sm:grid-cols-5">
+            <div>
+              <label className="block text-sm font-medium">対象月</label>
+              <input
+                name="target_month"
+                type="month"
+                defaultValue={targetMonth}
+                className="mt-1 w-full rounded border px-3 py-2"
+              />
+            </div>
 
-              return (
-                <div
-                  key={profile.id}
-                  className={
-                    isSelf
-                      ? "rounded border-2 border-black bg-gray-50 p-4"
-                      : "rounded border p-4"
-                  }
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-bold">{profile.name}</p>
+            <div>
+              <label className="block text-sm font-medium">項目名</label>
+              <input
+                name="title"
+                defaultValue="月謝"
+                className="mt-1 w-full rounded border px-3 py-2"
+              />
+            </div>
 
-                        {isSelf && (
-                          <span className="rounded bg-black px-2 py-1 text-xs text-white">
-                            自分
-                          </span>
-                        )}
+            <div>
+              <label className="block text-sm font-medium">金額</label>
+              <input
+                name="amount"
+                type="number"
+                min={0}
+                required
+                placeholder="5000"
+                className="mt-1 w-full rounded border px-3 py-2"
+              />
+            </div>
 
-                        <span
-                          className={`rounded px-2 py-1 text-xs ${statusClass(
-                            profile
-                          )}`}
-                        >
-                          {statusLabel(profile)}
+            <div>
+              <label className="block text-sm font-medium">期限日</label>
+              <input
+                name="due_date"
+                type="date"
+                className="mt-1 w-full rounded border px-3 py-2"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button className="w-full rounded bg-black px-4 py-2 text-white">
+                一括作成
+              </button>
+            </div>
+
+            <div className="sm:col-span-5">
+              <label className="block text-sm font-medium">備考</label>
+              <input
+                name="note"
+                className="mt-1 w-full rounded border px-3 py-2"
+                placeholder="例：6月分月謝"
+              />
+            </div>
+          </form>
+        </section>
+
+        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">未払い者への督促</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                未払いがあるユーザー：{unpaidUsers.length}名
+              </p>
+            </div>
+
+            {unpaidUsers.length > 0 ? (
+              <a
+                href={reminderHref}
+                className="rounded bg-orange-500 px-4 py-2 text-center font-bold text-white"
+              >
+                未払い者にまとめて督促メール
+              </a>
+            ) : (
+              <button
+                disabled
+                className="rounded bg-gray-200 px-4 py-2 text-gray-500"
+              >
+                未払い者なし
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-6 space-y-4">
+          {userList.map((user) => {
+            const items = itemsByUser.get(user.id) ?? [];
+            const unpaidItems = items.filter((item) => item.status === "unpaid");
+            const unpaidTotal = unpaidItems.reduce(
+              (sum, item) => sum + item.amount,
+              0
+            );
+
+            const currentTuition = items.find(
+              (item) =>
+                item.target_month === currentMonth &&
+                item.category === "tuition"
+            );
+
+            const targetMonthItems = items.filter(
+              (item) => item.target_month === targetMonth
+            );
+
+            return (
+              <article key={user.id} className="rounded-lg bg-white p-5 shadow">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold">{user.name}</h2>
+                    <p className="mt-1 text-sm text-gray-600">{user.email}</p>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {currentTuition?.status === "unpaid" && (
+                        <span className="rounded bg-red-100 px-3 py-1 text-sm font-bold text-red-700">
+                          今月月謝未払い
                         </span>
-
-                        <span className={roleClass(profile)}>
-                          {roleLabel(profile)}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 text-sm text-gray-600">
-                        {profile.email}
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        登録日：{formatDate(profile.created_at)}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {!profile.is_approved && profile.is_active && (
-                        <form action={approveUser}>
-                          <input type="hidden" name="id" value={profile.id} />
-                          <button className="rounded bg-green-600 px-3 py-2 text-sm text-white">
-                            承認
-                          </button>
-                        </form>
                       )}
 
-                      {isSelf ? (
-                        <span className="rounded bg-gray-100 px-3 py-2 text-sm text-gray-500">
-                          自分のログイン許可は変更不可
+                      {!currentTuition && (
+                        <span className="rounded bg-gray-100 px-3 py-1 text-sm font-bold text-gray-600">
+                          今月月謝未登録
                         </span>
-                      ) : profile.is_active ? (
-                        <form action={disableLogin}>
-                          <input type="hidden" name="id" value={profile.id} />
-                          <button className="rounded border border-red-300 px-3 py-2 text-sm text-red-700">
-                            ログイン不可にする
-                          </button>
-                        </form>
-                      ) : (
-                        <form action={enableLogin}>
-                          <input type="hidden" name="id" value={profile.id} />
-                          <button className="rounded border border-green-300 px-3 py-2 text-sm text-green-700">
-                            ログイン可能に戻す
-                          </button>
-                        </form>
                       )}
 
-                      {isSelf ? (
-                        <span className="rounded bg-gray-100 px-3 py-2 text-sm text-gray-500">
-                          自分の管理者権限は変更不可
+                      {currentTuition?.status === "paid" && (
+                        <span className="rounded bg-green-100 px-3 py-1 text-sm font-bold text-green-700">
+                          今月月謝支払い済み
                         </span>
-                      ) : profile.role === "admin" ? (
-                        <form action={revokeAdmin}>
-                          <input type="hidden" name="id" value={profile.id} />
-                          <button className="rounded border px-3 py-2 text-sm">
-                            管理者権限を削除
-                          </button>
-                        </form>
-                      ) : (
-                        <form action={grantAdmin}>
-                          <input type="hidden" name="id" value={profile.id} />
-                          <button className="rounded border px-3 py-2 text-sm">
-                            管理者権限を付与
-                          </button>
-                        </form>
+                      )}
+
+                      {currentTuition?.status === "exempt" && (
+                        <span className="rounded bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+                          今月月謝免除
+                        </span>
                       )}
                     </div>
                   </div>
-                </div>
-              );
-            })}
 
-            {profileList.length === 0 && (
-              <p className="rounded bg-gray-50 p-4 text-sm text-gray-600">
-                会員がまだ登録されていません。
-              </p>
-            )}
-          </div>
+                  <div className="rounded bg-red-50 px-4 py-3 text-right">
+                    <p className="text-sm text-red-700">未払い合計</p>
+                    <p className="text-2xl font-bold text-red-700">
+                      {formatYen(unpaidTotal)}
+                    </p>
+                  </div>
+                </div>
+
+                <details className="mt-5 rounded border bg-gray-50 p-4">
+                  <summary className="cursor-pointer font-bold">
+                    請求項目を管理
+                  </summary>
+
+                  <div className="mt-4 rounded bg-white p-4">
+                    <h3 className="font-bold">請求項目を追加</h3>
+
+                    <form action={createBillingItem} className="mt-3 grid gap-3 sm:grid-cols-6">
+                      <input type="hidden" name="user_id" value={user.id} />
+
+                      <div>
+                        <label className="block text-sm font-medium">対象月</label>
+                        <input
+                          name="target_month"
+                          type="month"
+                          defaultValue={targetMonth}
+                          className="mt-1 w-full rounded border px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium">費目</label>
+                        <select
+                          name="category"
+                          defaultValue="other"
+                          className="mt-1 w-full rounded border px-3 py-2"
+                        >
+                          <option value="tuition">月謝</option>
+                          <option value="trip">遠征費</option>
+                          <option value="event">大会・イベント費</option>
+                          <option value="uniform">ユニフォーム代</option>
+                          <option value="other">その他</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium">項目名</label>
+                        <input
+                          name="title"
+                          required
+                          placeholder="例：遠征費"
+                          className="mt-1 w-full rounded border px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium">金額</label>
+                        <input
+                          name="amount"
+                          type="number"
+                          min={0}
+                          required
+                          className="mt-1 w-full rounded border px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium">期限日</label>
+                        <input
+                          name="due_date"
+                          type="date"
+                          className="mt-1 w-full rounded border px-3 py-2"
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <button className="w-full rounded bg-black px-4 py-2 text-white">
+                          追加
+                        </button>
+                      </div>
+
+                      <div className="sm:col-span-6">
+                        <label className="block text-sm font-medium">備考</label>
+                        <input
+                          name="note"
+                          className="mt-1 w-full rounded border px-3 py-2"
+                          placeholder="例：○○大会交通費、宿泊費込み"
+                        />
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="mt-4">
+                    <h3 className="font-bold">
+                      {formatTargetMonth(targetMonth)} の請求項目
+                    </h3>
+
+                    {targetMonthItems.length === 0 ? (
+                      <p className="mt-2 rounded bg-white p-3 text-sm text-gray-600">
+                        この月の請求項目はありません。
+                      </p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        {targetMonthItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded border bg-white p-4"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`rounded px-2 py-1 text-xs font-bold ${statusClass(
+                                      item.status
+                                    )}`}
+                                  >
+                                    {statusLabel(item.status)}
+                                  </span>
+
+                                  <span className="rounded bg-gray-100 px-2 py-1 text-xs">
+                                    {categoryLabel(item.category)}
+                                  </span>
+                                </div>
+
+                                <p className="mt-2 text-lg font-bold">
+                                  {item.title}
+                                </p>
+
+                                <p className="mt-1 text-sm text-gray-600">
+                                  金額：{formatYen(item.amount)}
+                                </p>
+
+                                {item.due_date && (
+                                  <p className="mt-1 text-sm text-gray-600">
+                                    期限：{item.due_date}
+                                  </p>
+                                )}
+
+                                {item.note && (
+                                  <p className="mt-2 rounded bg-gray-50 p-2 text-sm text-gray-700">
+                                    備考：{item.note}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 sm:w-72">
+                                <form action={updateBillingItemStatus}>
+                                  <input
+                                    type="hidden"
+                                    name="item_id"
+                                    value={item.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="status"
+                                    value="paid"
+                                  />
+                                  <button className="w-full rounded bg-green-600 px-3 py-2 text-sm font-bold text-white">
+                                    済
+                                  </button>
+                                </form>
+
+                                <form action={updateBillingItemStatus}>
+                                  <input
+                                    type="hidden"
+                                    name="item_id"
+                                    value={item.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="status"
+                                    value="unpaid"
+                                  />
+                                  <button className="w-full rounded bg-red-600 px-3 py-2 text-sm font-bold text-white">
+                                    未
+                                  </button>
+                                </form>
+
+                                <form action={updateBillingItemStatus}>
+                                  <input
+                                    type="hidden"
+                                    name="item_id"
+                                    value={item.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="status"
+                                    value="exempt"
+                                  />
+                                  <button className="w-full rounded bg-gray-600 px-3 py-2 text-sm font-bold text-white">
+                                    免除
+                                  </button>
+                                </form>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {unpaidItems.length > 0 && (
+                    <div className="mt-5">
+                      <h3 className="font-bold text-red-700">未払い内訳</h3>
+
+                      <div className="mt-2 space-y-2">
+                        {unpaidItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between rounded bg-red-50 px-3 py-2 text-sm"
+                          >
+                            <span>
+                              {formatTargetMonth(item.target_month)}{" "}
+                              {item.title}
+                            </span>
+                            <span className="font-bold">
+                              {formatYen(item.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </details>
+              </article>
+            );
+          })}
         </section>
       </div>
     </main>

@@ -47,7 +47,7 @@ async function login(formData: FormData) {
     redirect("/admin");
   }
 
-  redirect("/user");
+  redirect("/user/payment-check");
 }
 
 export default function LoginPage() {
