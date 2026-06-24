@@ -630,6 +630,7 @@ export default function AdminCalendarClient({
 
         setSaveMessage("予定を登録しました。");
         resetNewEventForm();
+        closeModal();
         router.refresh();
       } catch {
         setErrorMessage("予定登録に失敗しました。");
@@ -666,6 +667,7 @@ export default function AdminCalendarClient({
         });
 
         setSaveMessage("予定を更新しました。");
+        closeModal();
         router.refresh();
       } catch {
         setErrorMessage("予定更新に失敗しました。");
@@ -758,7 +760,7 @@ export default function AdminCalendarClient({
         setBulkCreateAttendanceRequired(true);
         setBulkCreateIsPeriod(false);
         setBulkCreateIsHoliday(false);
-
+        closeModal();
         router.refresh();
       } catch {
         setErrorMessage("まとめて予定登録に失敗しました。");

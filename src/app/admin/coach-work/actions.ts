@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
@@ -137,7 +138,7 @@ export async function createCoachWorkLogs(formData: FormData) {
   );
 
   const note = cleanText(formData.get("note"));
-  const batchId = crypto.randomUUID();
+  const batchId = randomUUID();
 
   const rows = coachIds.map((coachId) => ({
     batch_id: batchId,
@@ -150,7 +151,6 @@ export async function createCoachWorkLogs(formData: FormData) {
     travel_expense: travelExpense,
     other_expense: otherExpense,
     note,
-    status: "submitted",
     updated_at: new Date().toISOString(),
   }));
 
@@ -221,38 +221,6 @@ export async function updateCoachWorkLog(formData: FormData) {
       travel_expense: travelExpense,
       other_expense: otherExpense,
       note,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", logId)
-    .eq("group_id", admin.group_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/coach-work");
-}
-
-export async function updateCoachWorkLogStatus(formData: FormData) {
-  const admin = await requireAdmin();
-
-  const logId = cleanText(formData.get("log_id"));
-  const status = cleanText(formData.get("status"));
-
-  if (!logId) {
-    throw new Error("勤怠記録IDが不明です");
-  }
-
-  if (status !== "submitted" && status !== "approved") {
-    throw new Error("状態が不正です");
-  }
-
-  await assertCoachWorkLogInAdminGroup(logId, admin.group_id);
-
-  const { error } = await supabase
-    .from("coach_work_logs")
-    .update({
-      status,
       updated_at: new Date().toISOString(),
     })
     .eq("id", logId)
