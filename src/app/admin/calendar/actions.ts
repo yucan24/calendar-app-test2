@@ -4,6 +4,14 @@ import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
 
+function safeColor(value: string, fallback = "#111827") {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+function toUtcISOStringFromDateKey(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
+}
+
 export async function updateAdminCalendarAttendance(
   eventId: string,
   userId: string,
@@ -71,4 +79,66 @@ export async function updateAdminCalendarAttendance(
 
   revalidatePath("/admin/calendar");
   revalidatePath(`/admin/calendar/${eventId}`);
+}
+
+export async function createAdminCalendarEventsForDates(input: {
+  dateKeys: string[];
+  title: string;
+  description: string;
+  location: string;
+  timeText: string;
+  isHoliday: boolean;
+  attendanceRequired: boolean;
+  isPeriod: boolean;
+  titleColor: string;
+  locationColor: string;
+  timeColor: string;
+}) {
+  const currentAdmin = await requireAdmin();
+
+  const dateKeys = Array.from(new Set(input.dateKeys))
+    .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey))
+    .sort();
+
+  const title = input.title.trim();
+  const description = input.description.trim();
+  const location = input.location.trim();
+  const timeText = input.timeText.trim();
+
+  if (dateKeys.length === 0) {
+    throw new Error("日付が選択されていません");
+  }
+
+  if (!title) {
+    throw new Error("予定名を入力してください");
+  }
+
+  const displayType = input.isPeriod ? "period" : "normal";
+  const attendanceRequired = input.isPeriod ? false : input.attendanceRequired;
+
+  const rows = dateKeys.map((dateKey) => ({
+    group_id: currentAdmin.group_id,
+    created_by: currentAdmin.id,
+    title,
+    description,
+    location,
+    time_text: timeText,
+    start_at: toUtcISOStringFromDateKey(dateKey),
+    end_at: null,
+    is_holiday: input.isHoliday,
+    title_color: safeColor(input.titleColor),
+    location_color: safeColor(input.locationColor),
+    time_color: safeColor(input.timeColor),
+    attendance_required: attendanceRequired,
+    display_type: displayType,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from("calendar_events").insert(rows);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/admin/calendar");
 }
