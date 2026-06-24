@@ -120,7 +120,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
             className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
           >
             ログイン
-          </Submitbutton>
+          </SubmitButton>
 
           <div className="pt-4 text-center">
             <a
