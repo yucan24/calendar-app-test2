@@ -125,7 +125,8 @@ export async function createTuitionForAllUsers(formData: FormData) {
     .from("profiles")
     .select("id")
     .eq("group_id", admin.group_id)
-    .eq("role", "user");
+    .eq("role", "user")
+    .eq("login_enabled", true);
 
   if (usersError) {
     throw new Error(usersError.message);
@@ -175,6 +176,50 @@ export async function createTuitionForAllUsers(formData: FormData) {
     if (error) {
       throw new Error(error.message);
     }
+  }
+
+  revalidatePath("/admin/users");
+  revalidatePath("/user/payment-check");
+}
+
+export async function updateBillingItem(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const itemId = cleanText(formData.get("item_id"));
+  const targetMonth = cleanText(formData.get("target_month"));
+  const category = cleanText(formData.get("category"));
+  const amount = parseAmount(formData.get("amount"));
+  const note = cleanText(formData.get("note"));
+
+  if (!itemId) {
+    throw new Error("請求項目が不明です");
+  }
+
+  if (!isValidTargetMonth(targetMonth)) {
+    throw new Error("対象月が不正です");
+  }
+
+  if (!VALID_CATEGORIES.includes(category)) {
+    throw new Error("費目が不正です");
+  }
+
+  await assertBillingItemInAdminGroup(itemId, admin.group_id);
+
+  const { error } = await supabase
+    .from("billing_items")
+    .update({
+      target_month: targetMonth,
+      category,
+      title: categoryLabel(category),
+      amount,
+      note,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", itemId)
+    .eq("group_id", admin.group_id);
+
+  if (error) {
+    throw new Error(error.message);
   }
 
   revalidatePath("/admin/users");

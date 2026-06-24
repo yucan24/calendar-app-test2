@@ -2,6 +2,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+type PageProps = {
+  searchParams?: Promise<{
+    error?: string;
+  }>;
+};
+
 async function login(formData: FormData) {
   "use server";
 
@@ -12,26 +18,26 @@ async function login(formData: FormData) {
   const loginCode = String(formData.get("login_code") ?? "").trim();
 
   if (!name || !loginCode) {
-    throw new Error("名前と4桁コードを入力してください");
+    redirect("/login?error=missing");
   }
 
   if (!/^\d{4}$/.test(loginCode)) {
-    throw new Error("4桁コードは数字4桁で入力してください");
+    redirect("/login?error=code");
   }
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, role")
+    .select("id, role, login_enabled")
     .eq("name", name)
     .eq("login_code", loginCode)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(error.message);
+  if (error || !profile) {
+    redirect("/login?error=failed");
   }
 
-  if (!profile) {
-    throw new Error("名前または4桁コードが違います");
+  if (!profile.login_enabled) {
+    redirect("/login?error=pending");
   }
 
   const cookieStore = await cookies();
@@ -51,7 +57,18 @@ async function login(formData: FormData) {
   redirect("/user/payment-check");
 }
 
-export default function LoginPage() {
+function errorMessage(error?: string) {
+  if (error === "missing") return "名前と4桁コードを入力してください。";
+  if (error === "code") return "4桁コードは数字4桁で入力してください。";
+  if (error === "failed") return "名前または4桁コードが違います。";
+  if (error === "pending") return "管理者の承認が完了していません。";
+  return "";
+}
+
+export default async function LoginPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const message = errorMessage(resolvedSearchParams?.error);
+
   return (
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-md">
@@ -59,6 +76,12 @@ export default function LoginPage() {
         <p className="mt-3 text-base font-medium text-gray-700">
           名前と4桁コードを入力してください。
         </p>
+
+        {message && (
+          <div className="mt-6 rounded bg-red-100 p-4 font-bold text-red-700">
+            {message}
+          </div>
+        )}
 
         <form
           action={login}

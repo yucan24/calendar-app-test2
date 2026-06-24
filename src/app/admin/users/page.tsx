@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import {
   createBillingItem,
   createTuitionForAllUsers,
+  updateBillingItem,
   updateBillingItemStatus,
 } from "./actions";
 import {
@@ -101,6 +102,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     .select("id, name, email, role")
     .eq("group_id", admin.group_id)
     .eq("role", "user")
+    .eq("login_enabled", true)
     .order("name", { ascending: true });
 
   if (usersError) {
@@ -539,6 +541,86 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                 </form>
                               </div>
                             </div>
+
+                            <details className="mt-4 rounded bg-gray-50 p-3">
+                              <summary className="cursor-pointer font-bold text-gray-900">
+                                請求内容を修正
+                              </summary>
+
+                              <form
+                                action={updateBillingItem}
+                                className="mt-3 grid min-w-0 gap-3 sm:grid-cols-4"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="item_id"
+                                  value={item.id}
+                                />
+
+                                <div className="min-w-0">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    対象月
+                                  </label>
+                                  <input
+                                    name="target_month"
+                                    type="month"
+                                    defaultValue={item.target_month}
+                                    className={fieldClass}
+                                  />
+                                </div>
+
+                                <div className="min-w-0">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    費目
+                                  </label>
+                                  <select
+                                    name="category"
+                                    defaultValue={item.category}
+                                    className={fieldClass}
+                                  >
+                                    <option value="tuition">月謝</option>
+                                    <option value="trip">遠征費</option>
+                                    <option value="event">
+                                      大会・イベント費
+                                    </option>
+                                    <option value="uniform">
+                                      ユニフォーム代
+                                    </option>
+                                    <option value="other">その他</option>
+                                  </select>
+                                </div>
+
+                                <div className="min-w-0">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    金額
+                                  </label>
+                                  <input
+                                    name="amount"
+                                    type="number"
+                                    min={0}
+                                    defaultValue={item.amount}
+                                    className={fieldClass}
+                                  />
+                                </div>
+
+                                <div className="flex min-w-0 items-end">
+                                  <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                                    修正
+                                  </button>
+                                </div>
+
+                                <div className="min-w-0 sm:col-span-4">
+                                  <label className="block text-sm font-bold text-gray-900">
+                                    備考
+                                  </label>
+                                  <input
+                                    name="note"
+                                    defaultValue={item.note ?? ""}
+                                    className={fieldClass}
+                                  />
+                                </div>
+                              </form>
+                            </details>
                           </div>
                         ))}
                       </div>

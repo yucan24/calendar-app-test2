@@ -24,6 +24,16 @@ export default async function AdminPage() {
 
         <div className="mt-8 grid gap-5">
           <a
+            href="/admin/members"
+            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
+          >
+            <h2 className="text-2xl font-bold text-gray-900">会員管理</h2>
+            <p className="mt-3 text-base font-medium text-gray-700">
+              会員登録の承認、登録情報編集、管理者権限の付与・削除、ログイン停止を行います。
+            </p>
+          </a>
+
+          <a
             href="/admin/users"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
