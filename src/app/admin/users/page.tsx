@@ -10,8 +10,6 @@ import {
   formatTargetMonth,
   formatYen,
   getCurrentTargetMonth,
-  getNextTargetMonth,
-  getPrevTargetMonth,
   isValidTargetMonth,
 } from "@/lib/month";
 
@@ -93,9 +91,6 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     resolvedSearchParams?.month && isValidTargetMonth(resolvedSearchParams.month)
       ? resolvedSearchParams.month
       : currentMonth;
-
-  const prevMonth = getPrevTargetMonth(targetMonth);
-  const nextMonth = getNextTargetMonth(targetMonth);
 
   const { data: users, error: usersError } = await supabase
     .from("profiles")
@@ -180,47 +175,13 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         </div>
 
         <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                対象月：{formatTargetMonth(targetMonth)}
-              </h2>
-              <p className="mt-1 text-sm font-medium text-gray-700">
-                今月の月謝未払いと、全期間の未払い合計を表示します。
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <a
-                href={`/admin/users?month=${prevMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                前月
-              </a>
-              <a
-                href={`/admin/users?month=${currentMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                今月
-              </a>
-              <a
-                href={`/admin/users?month=${nextMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                翌月
-              </a>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
           <details>
             <summary className="cursor-pointer text-lg font-bold text-gray-900">
-              月謝を一括作成
+              月謝を一括請求
             </summary>
 
             <p className="mt-3 text-sm font-medium text-gray-700">
-              対象月に月謝がまだ登録されていないユーザーへ、一括で月謝を作成します。
+              対象月に月謝がまだ登録されていないユーザーへ、一括で月謝を入力します。
             </p>
 
             <form
