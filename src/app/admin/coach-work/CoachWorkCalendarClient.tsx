@@ -714,14 +714,16 @@ export default function CoachWorkCalendarClient({
       <div className="mt-1 space-y-0.5">
         {input.allCoachingTotal > 0 && (
           <div className="rounded bg-blue-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-blue-800">
-            指:{formatHoursShort(input.myCoachingTotal)}(全
+            指:{formatHoursShort(input.myCoachingTotal)}
+            <br />(全
             {formatHoursShort(input.allCoachingTotal)})
           </div>
         )}
 
         {input.allAdminTotal > 0 && (
           <div className="rounded bg-purple-50 px-1 py-0.5 text-[9px] font-bold leading-tight text-purple-800">
-            事:{formatHoursShort(input.myAdminTotal)}(全
+            事:{formatHoursShort(input.myAdminTotal)}
+            <br />(全
             {formatHoursShort(input.allAdminTotal)})
           </div>
         )}
