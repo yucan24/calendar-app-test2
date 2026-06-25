@@ -208,6 +208,7 @@ function calendarTextStyle(
       color: color || "#111827",
       display: "block",
       width: "100%",
+      textAlign: "center",
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "clip",
@@ -695,7 +696,7 @@ function renderEventBlock(event: CalendarEvent) {
   const myResponse = myResponsesByEvent.get(event.id);
 
   return (
-    <div key={event.id}>
+    <div key={event.id} className="text-center">
       <div style={calendarTextStyle(event.title, event.title_color)}>
         {displayText(event.title)}
       </div>
@@ -1352,7 +1353,7 @@ function renderEventBlock(event: CalendarEvent) {
                     {periodEvents.slice(0, 1).map((event) => (
                       <div
                         key={event.id}
-                        className="rounded bg-teal-100 px-1 py-0.5 text-[10px] font-bold text-teal-800"
+                        className="rounded bg-teal-100 px-1 py-0.5 text-center text-[10px] font-bold text-teal-800"
                       >
                         {displayText(event.title)}
                       </div>
