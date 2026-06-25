@@ -1,48 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
-
-function cleanName(value: FormDataEntryValue | null) {
-  return String(value ?? "")
-    .replace(/\s+/g, "")
-    .trim();
-}
-
-function cleanText(value: FormDataEntryValue | null) {
-  return String(value ?? "").trim();
-}
-
-async function getMemberOrThrow(memberId: string, groupId: string) {
-  const { data: member, error } = await supabase
-    .from("profiles")
-    .select("id, group_id, role, login_enabled")
-    .eq("id", memberId)
-    .single();
-
-  if (error || !member) {
-    throw new Error("会員が見つかりません");
-  }
-
-  if (member.group_id !== groupId) {
-    throw new Error("この会員を操作する権限がありません");
-  }
-
-  return member;
-}
+import { supabase } from "@/lib/supabase";
 
 export type MemberActionState = {
   ok: boolean;
   message: string;
 };
 
-function normalizeName(value: FormDataEntryValue | null) {
-  return String(value ?? "").replace(/\s+/g, "").trim();
+function cleanText(value: unknown) {
+  return String(value ?? "").trim();
 }
 
-function cleanText(value: FormDataEntryValue | null) {
-  return String(value ?? "").trim();
+function normalizeName(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, "").trim();
 }
 
 function isDuplicateNameError(error: unknown) {
@@ -50,12 +22,34 @@ function isDuplicateNameError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    error.code === "23505"
+    (error as { code?: string }).code === "23505"
   ) {
     return true;
   }
 
   return false;
+}
+
+async function getMemberOrThrow(memberId: string, groupId: string) {
+  if (!memberId) {
+    throw new Error("会員IDが不明です。");
+  }
+
+  const { data: member, error } = await supabase
+    .from("profiles")
+    .select("id, group_id, role, login_enabled")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!member || member.group_id !== groupId) {
+    throw new Error("この会員を操作する権限がありません。");
+  }
+
+  return member;
 }
 
 export async function updateMemberProfile(
@@ -97,23 +91,12 @@ export async function updateMemberProfile(
     };
   }
 
-  const { data: targetMember, error: targetMemberError } = await supabase
-    .from("profiles")
-    .select("id, group_id")
-    .eq("id", memberId)
-    .maybeSingle();
-
-  if (targetMemberError) {
+  try {
+    await getMemberOrThrow(memberId, admin.group_id);
+  } catch (error) {
     return {
       ok: false,
-      message: targetMemberError.message,
-    };
-  }
-
-  if (!targetMember || targetMember.group_id !== admin.group_id) {
-    return {
-      ok: false,
-      message: "この会員を編集する権限がありません。",
+      message: error instanceof Error ? error.message : "会員情報の確認に失敗しました。",
     };
   }
 
@@ -177,16 +160,13 @@ export async function updateMemberLoginEnabled(formData: FormData) {
   const admin = await requireAdmin();
 
   const memberId = cleanText(formData.get("member_id"));
-  const loginEnabled = cleanText(formData.get("login_enabled")) === "true";
+  const loginEnabledValue = cleanText(formData.get("login_enabled"));
+  const loginEnabled = loginEnabledValue === "true";
 
-  if (!memberId) {
-    throw new Error("会員IDが不明です");
-  }
+  const member = await getMemberOrThrow(memberId, admin.group_id);
 
-  await getMemberOrThrow(memberId, admin.group_id);
-
-  if (memberId === admin.id && !loginEnabled) {
-    throw new Error("自分自身のログイン許可は削除できません");
+  if (member.id === admin.id && !loginEnabled) {
+    throw new Error("自分自身をログイン不可にはできません。");
   }
 
   const { error } = await supabase
@@ -210,18 +190,14 @@ export async function updateMemberRole(formData: FormData) {
   const memberId = cleanText(formData.get("member_id"));
   const role = cleanText(formData.get("role"));
 
-  if (!memberId) {
-    throw new Error("会員IDが不明です");
-  }
-
   if (role !== "admin" && role !== "user") {
-    throw new Error("権限が不正です");
+    throw new Error("権限の値が不正です。");
   }
 
-  await getMemberOrThrow(memberId, admin.group_id);
+  const member = await getMemberOrThrow(memberId, admin.group_id);
 
-  if (memberId === admin.id && role !== "admin") {
-    throw new Error("自分自身の管理者権限は削除できません");
+  if (member.id === admin.id && role !== "admin") {
+    throw new Error("自分自身の管理者権限は削除できません。");
   }
 
   const { error } = await supabase
@@ -237,5 +213,4 @@ export async function updateMemberRole(formData: FormData) {
   }
 
   revalidatePath("/admin/members");
-  revalidatePath("/admin/users");
 }
