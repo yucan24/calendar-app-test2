@@ -60,13 +60,16 @@ function getInputValue(input: AttendanceInput | EventInput, key: string) {
     return cleanText(input.get(key));
   }
 
-  return cleanText(input[key]);
+  return cleanText((input as Record<string, unknown>)[key]);
 }
 
 function getRawValue(input: EventInput, key: string) {
   if (input instanceof FormData) {
     return input.get(key);
   }
+
+  return (input as Record<string, unknown>)[key];
+}
 
   return input[key];
 }
