@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { updateUserAttendance } from "./actions";
+import { updateUserCalendarAttendance } from "./actions";
 
 type CurrentUser = {
   id: string;
@@ -520,7 +520,7 @@ export default function UserCalendarClient({
 
     startTransition(async () => {
       try {
-        await updateUserAttendance(eventId, currentUser.id, nextStatus);
+        await updateUserCalendarAttendance(eventId, currentUser.id, nextStatus);
         setSaveMessage("保存しました。");
         router.refresh();
       } catch {
@@ -559,7 +559,7 @@ export default function UserCalendarClient({
     startTransition(async () => {
       try {
         for (const eventId of targetIds) {
-          await updateUserAttendance(eventId, currentUser.id, nextStatus);
+          await updateUserCalendarAttendance(eventId, currentUser.id, nextStatus);
         }
 
         setSaveMessage(`${targetIds.length}件の出欠を保存しました。`);
