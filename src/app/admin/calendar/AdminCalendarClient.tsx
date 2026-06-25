@@ -451,6 +451,36 @@ export default function AdminCalendarClient({
       .map((profile) => profile.name);
   }
 
+function responseMark(status: string | null | undefined) {
+  if (status === "attend") return "〇";
+  if (status === "absent") return "×";
+  if (status === "pending") return "△";
+  return "未";
+}
+
+function roleLabel(role: "admin" | "user") {
+  if (role === "admin") return "指導者";
+  return "選手";
+}
+
+function getResponseRows(eventId: string) {
+  const eventResponses = responsesByEvent.get(eventId) ?? [];
+  const responseByUserId = new Map<string, EventResponse>();
+
+  for (const response of eventResponses) {
+    responseByUserId.set(response.user_id, response);
+  }
+
+  return profiles.map((profile) => {
+    const response = responseByUserId.get(profile.id) ?? null;
+
+    return {
+      profile,
+      response,
+    };
+  });
+}
+  
   function clearLongPressTimer() {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -651,7 +681,8 @@ function handleAttendance(formData: FormData) {
       const note = cleanText(formData.get("note"));
 
       await updateAdminCalendarAttendance(eventId, status, note);
-
+      
+      closeSingleModal();
       router.refresh();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -971,25 +1002,45 @@ function renderEventBlock(event: CalendarEvent) {
               </SubmitButton>
             </form>
 
-            <details className="mt-4 rounded bg-gray-50 p-3">
+            <details className="mt-4 rounded bg-gray-50 p-3" open>
               <summary className="cursor-pointer font-bold text-gray-900">
-                参加者一覧
+                回答状況一覧
               </summary>
-
-              <div className="mt-3 space-y-3 text-sm">
-                <div>
-                  <p className="font-bold text-gray-900">指導者</p>
-                  <p className="mt-1 font-medium text-gray-700">
-                    {coachNames.length > 0 ? coachNames.join("、") : "なし"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="font-bold text-gray-900">選手</p>
-                  <p className="mt-1 font-medium text-gray-700">
-                    {playerNames.length > 0 ? playerNames.join("、") : "なし"}
-                  </p>
-                </div>
+            
+              <div className="mt-3 overflow-hidden rounded border border-gray-200 bg-white text-sm">
+                {getResponseRows(event.id).map(({ profile, response }) => (
+                  <div
+                    key={profile.id}
+                    className="border-b border-gray-200 p-3 last:border-b-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-gray-900">{profile.name}</p>
+                        <p className="mt-0.5 text-xs font-bold text-gray-600">
+                          {roleLabel(profile.role)}
+                        </p>
+                      </div>
+            
+                      <span
+                        className={`shrink-0 rounded px-2 py-1 text-xs font-bold ${statusClass(
+                          response?.status
+                        )}`}
+                      >
+                        {responseMark(response?.status)} {statusLabel(response?.status)}
+                      </span>
+                    </div>
+            
+                    {response?.note ? (
+                      <p className="mt-2 rounded bg-gray-50 p-2 text-xs font-medium text-gray-800">
+                        備考：{response.note}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs font-medium text-gray-500">
+                        備考なし
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             </details>
           </>
