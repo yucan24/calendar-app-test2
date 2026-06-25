@@ -7,11 +7,6 @@ import { useFormStatus } from "react-dom";
 type SubmitButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
   pendingText?: ReactNode;
-
-  /**
-   * Client Component側で useTransition の isPending を使っている場合に渡す
-   * 例：<SubmitButton busy={isPending}>保存</SubmitButton>
-   */
   busy?: boolean;
 };
 
@@ -27,6 +22,7 @@ export default function SubmitButton({
 }: SubmitButtonProps) {
   const { pending } = useFormStatus();
 
+  const buttonType = type ?? "submit";
   const clickedRef = useRef(false);
   const [clicked, setClicked] = useState(false);
 
@@ -43,7 +39,7 @@ export default function SubmitButton({
     const timer = window.setTimeout(() => {
       clickedRef.current = false;
       setClicked(false);
-    }, 500);
+    }, 800);
 
     return () => {
       window.clearTimeout(timer);
@@ -53,7 +49,7 @@ export default function SubmitButton({
   return (
     <button
       {...props}
-      type={type ?? "submit"}
+      type={buttonType}
       disabled={isBusy}
       aria-disabled={isBusy}
       data-busy={isBusy ? "true" : "false"}
@@ -71,9 +67,17 @@ export default function SubmitButton({
         }
 
         clickedRef.current = true;
-        setClicked(true);
+
+        /*
+          submitボタンの場合、クリック直後にdisabledへ切り替えると
+          ブラウザのform submit自体が止まることがある。
+          そのため、disabled化は次のtickへ遅らせる。
+        */
+        window.setTimeout(() => {
+          setClicked(true);
+        }, 0);
       }}
-      className={`${className} disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50`}
+      className={`${className} disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50`}
     >
       {isBusy ? pendingText : children}
     </button>
