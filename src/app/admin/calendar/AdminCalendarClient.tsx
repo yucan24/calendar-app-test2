@@ -1026,7 +1026,7 @@ function renderEventBlock(event: CalendarEvent) {
                           response?.status
                         )}`}
                       >
-                        {responseMark(response?.status)} {statusLabel(response?.status)}
+                        {statusLabel(response?.status)}
                       </span>
                     </div>
             
