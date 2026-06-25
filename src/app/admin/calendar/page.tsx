@@ -470,7 +470,6 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
           currentAdmin={{
             id: admin.id,
             name: admin.name,
-            group_id: admin.group_id,
           }}
           currentYear={currentYear}
           currentMonth={currentMonth}
