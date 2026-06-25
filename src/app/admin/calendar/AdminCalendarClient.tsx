@@ -471,7 +471,7 @@ function getResponseRows(eventId: string) {
     responseByUserId.set(response.user_id, response);
   }
 
-  return profiles.map((profile) => {
+  return profileList.map((profile) => {
     const response = responseByUserId.get(profile.id) ?? null;
 
     return {
