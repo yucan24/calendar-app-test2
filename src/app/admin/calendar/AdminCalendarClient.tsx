@@ -641,28 +641,23 @@ export default function AdminCalendarClient({
     });
   }
 
-  function handleAttendance(formData: FormData) {
-    setErrorMessage("");
+function handleAttendance(formData: FormData) {
+  setErrorMessage("");
 
-    runLockedAction(async () => {
-      try {
-        const eventId = cleanText(formData.get("event_id"));
-        const status = cleanText(formData.get("status"));
-        const note = cleanText(formData.get("note"));
+  runLockedAction(async () => {
+    try {
+      const eventId = cleanText(formData.get("event_id"));
+      const status = cleanText(formData.get("status"));
+      const note = cleanText(formData.get("note"));
 
-        await updateAdminCalendarAttendance({
-          eventId,
-          event_id: eventId,
-          status,
-          note,
-        } as never);
+      await updateAdminCalendarAttendance(eventId, status, note);
 
-        router.refresh();
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error));
-      }
-    });
-  }
+      router.refresh();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  });
+}
 
   function renderEventBlock(event: CalendarEvent) {
     const summary = getEventSummary(event.id);
