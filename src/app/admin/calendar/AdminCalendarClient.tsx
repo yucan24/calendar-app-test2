@@ -659,36 +659,53 @@ function handleAttendance(formData: FormData) {
   });
 }
 
-  function renderEventBlock(event: CalendarEvent) {
-    const summary = getEventSummary(event.id);
+function renderEventBlock(event: CalendarEvent) {
+  const summary = getEventSummary(event.id);
+  const myResponse = myResponsesByEvent.get(event.id);
 
-    return (
-      <div key={event.id}>
-        <div style={calendarTextStyle(event.title, event.title_color)}>
-          {displayText(event.title)}
+  return (
+    <div key={event.id}>
+      <div style={calendarTextStyle(event.title, event.title_color)}>
+        {displayText(event.title)}
+      </div>
+
+      {event.location && (
+        <div style={calendarTextStyle(event.location, event.location_color)}>
+          {displayText(event.location)}
         </div>
+      )}
 
-        {event.location && (
-          <div style={calendarTextStyle(event.location, event.location_color)}>
-            {displayText(event.location)}
+      {event.time_text && (
+        <div style={calendarTextStyle(event.time_text, event.time_color)}>
+          {displayText(event.time_text)}
+        </div>
+      )}
+
+      {event.attendance_required && (
+        <>
+          <div
+            className={`mt-0.5 inline-block rounded px-1 py-0.5 text-[9px] font-bold leading-tight ${statusClass(
+              myResponse?.status
+            )}`}
+          >
+            {myResponse?.status === "attend"
+              ? "〇"
+              : myResponse?.status === "absent"
+                ? "×"
+                : myResponse?.status === "pending"
+                  ? "△"
+                  : "未"}
           </div>
-        )}
 
-        {event.time_text && (
-          <div style={calendarTextStyle(event.time_text, event.time_color)}>
-            {displayText(event.time_text)}
-          </div>
-        )}
-
-        {event.attendance_required && (
           <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
             <div>指導者:{summary.coachCount}人</div>
             <div>選手:{summary.playerCount}人</div>
           </div>
-        )}
-      </div>
-    );
-  }
+        </>
+      )}
+    </div>
+  );
+}
 
   function renderEventForm(input: {
     mode: "create" | "edit" | "bulk";
