@@ -1,21 +1,25 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
+import type {
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
 } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import SubmitButton from "@/components/SubmitButton";
 import { updateUserCalendarAttendance } from "./actions";
+import { formatTargetMonth } from "@/lib/month";
 
 type CurrentUser = {
   id: string;
   name: string;
-  group_id: string;
+};
+
+type Profile = {
+  id: string;
+  name: string;
+  email?: string | null;
+  role: "admin" | "user";
 };
 
 type CalendarEvent = {
@@ -23,70 +27,119 @@ type CalendarEvent = {
   title: string;
   description: string | null;
   location: string | null;
-  time_text: string | null;
   start_at: string;
+  end_at?: string | null;
+  time_text: string | null;
   is_holiday: boolean;
   title_color: string | null;
   location_color: string | null;
   time_color: string | null;
   attendance_required: boolean;
-  display_type: string;
+  display_type: string | null;
 };
 
 type EventResponse = {
-  id: string;
+  id?: string;
   event_id: string;
   user_id: string;
-  status: string;
+  status: "attend" | "absent" | "pending";
   note: string | null;
 };
 
-type EventSummary = {
-  attend: number;
-  pending: number;
-  absent: number;
-  coachAttend: number;
-  playerAttend: number;
+type CalendarCell = {
+  dateKey: string;
+  day: number;
+  isCurrentMonth: boolean;
 };
 
-type UserCalendarClientProps = {
-  currentUser: CurrentUser;
-  currentYear: number;
-  currentMonth: number;
+type Props = {
+  currentUser?: CurrentUser;
+  currentProfile?: CurrentUser;
+  targetMonth: string;
+  currentMonth: string;
+  prevMonth: string;
+  nextMonth: string;
   todayKey: string;
   events: CalendarEvent[];
-  myResponses: EventResponse[];
-  summariesByEvent: Record<string, EventSummary>;
+  responses: EventResponse[];
+  profiles?: Profile[];
+  members?: Profile[];
 };
 
-const WEEKDAYS = [
-  { label: "月", value: 1 },
-  { label: "火", value: 2 },
-  { label: "水", value: 3 },
-  { label: "木", value: 4 },
-  { label: "金", value: 5 },
-  { label: "土", value: 6 },
-  { label: "日", value: 0 },
-];
+const fieldClass =
+  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "未回答" },
-  { value: "attend", label: "〇 出席" },
-  { value: "pending", label: "△ 未定" },
-  { value: "absent", label: "× 欠席" },
-];
+const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
-const LONG_PRESS_MS = 450;
-const SCROLL_MOVE_THRESHOLD = 14;
+function cleanText(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
+}
 
-function toDateKeyFromParts(year: number, month: number, date = 1) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(
+function makeDateKey(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(
     2,
     "0"
   )}`;
 }
 
-function getEventDateKey(value: string) {
+function createCalendarCells(targetMonth: string): CalendarCell[] {
+  const [year, month] = targetMonth.split("-").map(Number);
+
+  const firstDate = new Date(year, month - 1, 1);
+  const lastDate = new Date(year, month, 0);
+  const firstWeekIndex = (firstDate.getDay() + 6) % 7;
+  const daysInMonth = lastDate.getDate();
+
+  const cells: CalendarCell[] = [];
+
+  const prevLastDate = new Date(year, month - 1, 0);
+  const prevDaysInMonth = prevLastDate.getDate();
+
+  for (let i = firstWeekIndex - 1; i >= 0; i--) {
+    const day = prevDaysInMonth - i;
+    const prevMonthDate = new Date(year, month - 2, day);
+
+    cells.push({
+      dateKey: makeDateKey(
+        prevMonthDate.getFullYear(),
+        prevMonthDate.getMonth() + 1,
+        prevMonthDate.getDate()
+      ),
+      day,
+      isCurrentMonth: false,
+    });
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push({
+      dateKey: makeDateKey(year, month, day),
+      day,
+      isCurrentMonth: true,
+    });
+  }
+
+  let nextDay = 1;
+
+  while (cells.length % 7 !== 0) {
+    const nextMonthDate = new Date(year, month, nextDay);
+
+    cells.push({
+      dateKey: makeDateKey(
+        nextMonthDate.getFullYear(),
+        nextMonthDate.getMonth() + 1,
+        nextMonthDate.getDate()
+      ),
+      day: nextDay,
+      isCurrentMonth: false,
+    });
+
+    nextDay++;
+  }
+
+  return cells;
+}
+
+function getDateKeyFromIso(value: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -101,65 +154,11 @@ function getEventDateKey(value: string) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateKey: string) {
+function formatDate(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     dateStyle: "full",
     timeZone: "Asia/Tokyo",
-  }).format(new Date(`${dateKey}T00:00:00+09:00`));
-}
-
-function formatShortDateLabel(dateKey: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-    timeZone: "Asia/Tokyo",
-  }).format(new Date(`${dateKey}T00:00:00+09:00`));
-}
-
-function getMonthDaysMondayStart(year: number, month: number) {
-  const firstDay = new Date(year, month - 1, 1);
-  const lastDay = new Date(year, month, 0);
-
-  const firstWeekday = firstDay.getDay();
-  const offset = (firstWeekday + 6) % 7;
-  const lastDate = lastDay.getDate();
-
-  const cells: Array<{
-    dateKey: string;
-    day: number;
-    weekday: number;
-  } | null> = [];
-
-  for (let i = 0; i < offset; i++) {
-    cells.push(null);
-  }
-
-  for (let date = 1; date <= lastDate; date++) {
-    const value = new Date(year, month - 1, date);
-
-    cells.push({
-      dateKey: toDateKeyFromParts(year, month, date),
-      day: date,
-      weekday: value.getDay(),
-    });
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
-
-  return cells;
-}
-
-function getPrevMonth(year: number, month: number) {
-  if (month === 1) return { year: year - 1, month: 12 };
-  return { year, month: month - 1 };
-}
-
-function getNextMonth(year: number, month: number) {
-  if (month === 12) return { year: year + 1, month: 1 };
-  return { year, month: month + 1 };
+  }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
 function visualLength(value: string | null | undefined) {
@@ -167,7 +166,6 @@ function visualLength(value: string | null | undefined) {
   let count = 0;
 
   for (const char of Array.from(text)) {
-    // 半角英数字・記号は0.5、全角文字は1として扱う
     count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
   }
 
@@ -188,7 +186,6 @@ function displayText(value: string | null | undefined) {
 function isTimeLikeText(value: string | null | undefined) {
   const text = String(value ?? "").trim();
 
-  // 9:00-12:00 / 09:00〜12:00 / 18:30-21:00 など
   return /^\d{1,2}[:：]\d{2}\s*[-ー－〜~]\s*\d{1,2}[:：]\d{2}$/.test(
     text
   );
@@ -203,9 +200,6 @@ function calendarTextStyle(
   const hasLineBreak = text.includes("\n");
   const isTimeText = isTimeLikeText(text);
 
-  // 時間表記は潰さない。
-  // 9:00-12:00 は半角なので visualLength では短く見えるが、
-  // 実際の表示幅は広いため、横圧縮と強い字間詰めを使わない。
   if (isTimeText) {
     return {
       color: color || "#111827",
@@ -222,12 +216,8 @@ function calendarTextStyle(
     };
   }
 
-  // 改行なし・全角5文字以内は1行表示を優先。
   if (!hasLineBreak && length <= 5) {
-    // 4文字以下はすべて「4文字の時」と同じサイズに統一。
-    // 例：練習 / 試合 / 合同練習 などで文字サイズがバラつかないようにする。
     const fontSize = length <= 4 ? "10.2px" : "8.6px";
-
     const letterSpacing = length >= 5 ? "-0.14em" : "-0.04em";
 
     return {
@@ -245,7 +235,6 @@ function calendarTextStyle(
     };
   }
 
-  // 長い文字だけ最大2行表示
   return {
     color: color || "#111827",
     display: "-webkit-box",
@@ -259,175 +248,191 @@ function calendarTextStyle(
   };
 }
 
-function statusCalendarLabel(status: string | null | undefined) {
-  if (status === "attend") return "〇";
-  if (status === "pending") return "△";
-  if (status === "absent") return "×";
-  return "未回答";
-}
-
-function statusLongLabel(status: string | null | undefined) {
+function statusLabel(status: string | null | undefined) {
   if (status === "attend") return "〇 出席";
-  if (status === "pending") return "△ 未定";
   if (status === "absent") return "× 欠席";
+  if (status === "pending") return "△ 未定";
   return "未回答";
 }
 
-function statusPillClass(status: string | null | undefined) {
-  if (status === "attend") return "bg-green-500 text-white";
-  if (status === "pending") return "bg-yellow-500 text-white";
-  if (status === "absent") return "bg-red-500 text-white";
-  return "bg-orange-500 text-white";
+function statusClass(status: string | null | undefined) {
+  if (status === "attend") return "bg-green-100 text-green-800";
+  if (status === "absent") return "bg-red-100 text-red-800";
+  if (status === "pending") return "bg-yellow-100 text-yellow-800";
+  return "bg-gray-100 text-gray-700";
 }
 
-function statusButtonClass(status: string, currentStatus: string) {
-  const isSelected = status === currentStatus;
-
-  if (!isSelected) return "border-gray-300 bg-white text-gray-700";
-  if (status === "attend") return "border-green-500 bg-green-500 text-white";
-  if (status === "pending") return "border-yellow-500 bg-yellow-500 text-white";
-  if (status === "absent") return "border-red-500 bg-red-500 text-white";
-
-  return "border-orange-500 bg-orange-500 text-white";
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return "処理に失敗しました";
 }
 
-function uniqueSortedDateKeys(dateKeys: string[]) {
-  return Array.from(new Set(dateKeys)).sort();
+function addDateToSet(set: Set<string>, dateKey: string) {
+  const next = new Set(set);
+  next.add(dateKey);
+  return next;
 }
 
 export default function UserCalendarClient({
-  currentUser,
-  currentYear,
+  currentUser: currentUserProp,
+  currentProfile,
+  targetMonth,
   currentMonth,
+  prevMonth,
+  nextMonth,
   todayKey,
   events,
-  myResponses,
-  summariesByEvent,
-}: UserCalendarClientProps) {
+  responses,
+  profiles,
+  members,
+}: Props) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const currentUser = currentUserProp ?? currentProfile;
+  const currentUserId = currentUser?.id ?? "";
 
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [bulkDateKeys, setBulkDateKeys] = useState<string[]>([]);
-  const [dragDateKeys, setDragDateKeysState] = useState<string[]>([]);
-  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedDateKeys, setSelectedDateKeys] = useState<Set<string>>(
+    new Set()
+  );
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
+  const [isPending, startTransition] = useTransition();
 
+  const actionLockRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
-  const dragDateKeysRef = useRef<string[]>([]);
-  const captureElementRef = useRef<HTMLElement | null>(null);
-  const capturedPointerIdRef = useRef<number | null>(null);
+  const pointerDownDateRef = useRef<string | null>(null);
+  const didLongPressRef = useRef(false);
+  const movedTooMuchRef = useRef(false);
+  const startPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  const pointerStateRef = useRef({
-    down: false,
-    selectionActive: false,
-    startKey: "",
-    startX: 0,
-    startY: 0,
-    movedBeforeLongPress: false,
-  });
-
-  const [localResponses, setLocalResponses] = useState<Record<string, string>>(
-    () => {
-      const result: Record<string, string> = {};
-
-      for (const response of myResponses) {
-        result[response.event_id] = response.status;
-      }
-
-      return result;
-    }
+  const profileList = useMemo(
+    () => profiles ?? members ?? [],
+    [profiles, members]
   );
 
-  useEffect(() => {
-    const result: Record<string, string> = {};
+  const profileById = useMemo(() => {
+    const map = new Map<string, Profile>();
 
-    for (const response of myResponses) {
-      result[response.event_id] = response.status;
+    for (const profile of profileList) {
+      map.set(profile.id, profile);
     }
 
-    setLocalResponses(result);
-  }, [myResponses]);
+    return map;
+  }, [profileList]);
 
-  useEffect(() => {
-    if (!isSelecting) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const originalTouchAction = document.body.style.touchAction;
-    const originalOverscrollBehavior = document.body.style.overscrollBehavior;
-
-    function preventTouchMove(event: TouchEvent) {
-      event.preventDefault();
-    }
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-    document.body.style.overscrollBehavior = "none";
-
-    document.addEventListener("touchmove", preventTouchMove, {
-      passive: false,
-    });
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.touchAction = originalTouchAction;
-      document.body.style.overscrollBehavior = originalOverscrollBehavior;
-
-      document.removeEventListener("touchmove", preventTouchMove);
-    };
-  }, [isSelecting]);
-
-  const monthCells = useMemo(
-    () => getMonthDaysMondayStart(currentYear, currentMonth),
-    [currentYear, currentMonth]
-  );
+  const cells = useMemo(() => createCalendarCells(targetMonth), [targetMonth]);
 
   const eventsByDate = useMemo(() => {
-    const result: Record<string, CalendarEvent[]> = {};
+    const map = new Map<string, CalendarEvent[]>();
 
     for (const event of events) {
-      const dateKey = getEventDateKey(event.start_at);
-
-      if (!result[dateKey]) result[dateKey] = [];
-      result[dateKey].push(event);
+      const dateKey = getDateKeyFromIso(event.start_at);
+      const list = map.get(dateKey) ?? [];
+      list.push(event);
+      map.set(dateKey, list);
     }
 
-    return result;
+    return map;
   }, [events]);
 
+  const responsesByEvent = useMemo(() => {
+    const map = new Map<string, EventResponse[]>();
+
+    for (const response of responses) {
+      const list = map.get(response.event_id) ?? [];
+      list.push(response);
+      map.set(response.event_id, list);
+    }
+
+    return map;
+  }, [responses]);
+
+  const myResponsesByEvent = useMemo(() => {
+    const map = new Map<string, EventResponse>();
+
+    if (!currentUserId) return map;
+
+    for (const response of responses) {
+      if (response.user_id === currentUserId) {
+        map.set(response.event_id, response);
+      }
+    }
+
+    return map;
+  }, [responses, currentUserId]);
+
   const selectedDateEvents = selectedDateKey
-    ? eventsByDate[selectedDateKey] ?? []
+    ? eventsByDate.get(selectedDateKey) ?? []
     : [];
 
-  const selectedEvent =
-    selectedEventId && events.find((event) => event.id === selectedEventId)
-      ? events.find((event) => event.id === selectedEventId) ?? null
-      : null;
+  const selectedEvent = selectedEventId
+    ? events.find((event) => event.id === selectedEventId) ?? null
+    : null;
 
-  const bulkEvents = useMemo(() => {
-    return uniqueSortedDateKeys(bulkDateKeys).flatMap((dateKey) => {
-      const dayEvents = eventsByDate[dateKey] ?? [];
+  const selectedDateKeyList = Array.from(selectedDateKeys).sort();
 
-      return dayEvents.map((event) => ({
-        dateKey,
-        event,
-      }));
-    });
-  }, [bulkDateKeys, eventsByDate]);
-
-  const bulkAnswerTargets = bulkEvents.filter(
-    ({ event }) => event.attendance_required
+  const selectedBulkEvents = selectedDateKeyList.flatMap((dateKey) =>
+    (eventsByDate.get(dateKey) ?? []).filter(
+      (event) => event.attendance_required && event.display_type !== "period"
+    )
   );
 
-  const prev = getPrevMonth(currentYear, currentMonth);
-  const next = getNextMonth(currentYear, currentMonth);
+  if (!currentUser) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-4 text-gray-900">
+        <p className="rounded bg-white p-4 font-bold text-red-700 shadow">
+          ログイン情報が見つかりません。
+        </p>
+      </main>
+    );
+  }
 
-  function setDragKeys(dateKeys: string[]) {
-    const next = uniqueSortedDateKeys(dateKeys);
-    dragDateKeysRef.current = next;
-    setDragDateKeysState(next);
+  function getEventSummary(eventId: string) {
+    const eventResponses = responsesByEvent.get(eventId) ?? [];
+
+    let coachCount = 0;
+    let playerCount = 0;
+    let attend = 0;
+    let pending = 0;
+    let absent = 0;
+
+    for (const response of eventResponses) {
+      if (response.status === "attend") {
+        attend += 1;
+
+        const profile = profileById.get(response.user_id);
+
+        if (profile?.role === "admin") {
+          coachCount += 1;
+        } else {
+          playerCount += 1;
+        }
+      }
+
+      if (response.status === "pending") pending += 1;
+      if (response.status === "absent") absent += 1;
+    }
+
+    return {
+      coachCount,
+      playerCount,
+      attend,
+      pending,
+      absent,
+    };
+  }
+
+  function getParticipants(eventId: string, role: "admin" | "user") {
+    const eventResponses = responsesByEvent.get(eventId) ?? [];
+
+    return eventResponses
+      .filter((response) => response.status === "attend")
+      .map((response) => profileById.get(response.user_id))
+      .filter((profile): profile is Profile => Boolean(profile))
+      .filter((profile) => profile.role === role)
+      .map((profile) => profile.name);
   }
 
   function clearLongPressTimer() {
@@ -437,981 +442,733 @@ export default function UserCalendarClient({
     }
   }
 
-  function releasePointerCapture() {
-    const element = captureElementRef.current;
-    const pointerId = capturedPointerIdRef.current;
-
-    if (element && pointerId !== null) {
-      try {
-        if (element.hasPointerCapture(pointerId)) {
-          element.releasePointerCapture(pointerId);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    captureElementRef.current = null;
-    capturedPointerIdRef.current = null;
+  function resetPointerState() {
+    clearLongPressTimer();
+    pointerDownDateRef.current = null;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = null;
+    setIsSelectionActive(false);
   }
 
-  function openDayModal(dateKey: string) {
-    const dayEvents = eventsByDate[dateKey] ?? [];
-
-    setSelectedDateKey(dateKey);
-    setSelectedEventId(dayEvents[0]?.id ?? null);
-    setBulkDateKeys([]);
-    setDragKeys([]);
-    setIsSelecting(false);
-    setErrorMessage("");
-    setSaveMessage("");
-  }
-
-  function openEventModal(dateKey: string, eventId: string) {
-    setSelectedDateKey(dateKey);
-    setSelectedEventId(eventId);
-    setBulkDateKeys([]);
-    setDragKeys([]);
-    setIsSelecting(false);
-    setErrorMessage("");
-    setSaveMessage("");
-  }
-
-  function closeModal() {
+  function closeSingleModal() {
     setSelectedDateKey(null);
     setSelectedEventId(null);
-    setBulkDateKeys([]);
-    setDragKeys([]);
-    setIsSelecting(false);
     setErrorMessage("");
-    setSaveMessage("");
   }
 
-  function removeBulkDate(dateKey: string) {
-    setBulkDateKeys((prev) => {
-      const next = prev.filter((key) => key !== dateKey);
-
-      if (next.length === 0) {
-        setDragKeys([]);
-        setIsSelecting(false);
-      }
-
-      return next;
-    });
-
-    setDragKeys(dragDateKeysRef.current.filter((key) => key !== dateKey));
+  function closeBulkModal() {
+    setIsBulkModalOpen(false);
+    setSelectedDateKeys(new Set());
+    setErrorMessage("");
   }
 
-  function saveAttendance(eventId: string, nextStatus: string) {
-    setErrorMessage("");
-    setSaveMessage("");
+  function getDateKeyFromPoint(clientX: number, clientY: number) {
+    const element = document.elementFromPoint(clientX, clientY);
+    const dateElement = element?.closest(
+      "[data-date-key]"
+    ) as HTMLElement | null;
 
-    setLocalResponses((prevState) => {
-      const nextState = { ...prevState };
+    return dateElement?.dataset.dateKey ?? null;
+  }
 
-      if (nextStatus) {
-        nextState[eventId] = nextStatus;
-      } else {
-        delete nextState[eventId];
-      }
+  function runLockedAction(action: () => Promise<void>) {
+    if (actionLockRef.current) return;
 
-      return nextState;
-    });
+    actionLockRef.current = true;
 
     startTransition(async () => {
       try {
-        await updateUserCalendarAttendance(eventId, currentUser.id, nextStatus);
-        setSaveMessage("保存しました。");
-        router.refresh();
-      } catch {
-        setErrorMessage("保存に失敗しました。通信状態を確認してください。");
+        await action();
+      } finally {
+        actionLockRef.current = false;
       }
     });
-  }
-
-  function saveBulkAttendance(nextStatus: string) {
-    setErrorMessage("");
-    setSaveMessage("");
-
-    const targetIds = Array.from(
-      new Set(bulkAnswerTargets.map(({ event }) => event.id))
-    );
-
-    if (targetIds.length === 0) {
-      setErrorMessage("出欠回答できる予定が選択されていません。");
-      return;
-    }
-
-    setLocalResponses((prevState) => {
-      const nextState = { ...prevState };
-
-      for (const eventId of targetIds) {
-        if (nextStatus) {
-          nextState[eventId] = nextStatus;
-        } else {
-          delete nextState[eventId];
-        }
-      }
-
-      return nextState;
-    });
-
-    startTransition(async () => {
-      try {
-        for (const eventId of targetIds) {
-          await updateUserCalendarAttendance(eventId, currentUser.id, nextStatus);
-        }
-
-        setSaveMessage(`${targetIds.length}件の出欠を保存しました。`);
-        router.refresh();
-      } catch {
-        setErrorMessage("まとめて保存に失敗しました。通信状態を確認してください。");
-      }
-    });
-  }
-
-  function addDragDate(dateKey: string) {
-    const current = dragDateKeysRef.current;
-
-    if (current.includes(dateKey)) return;
-
-    setDragKeys([...current, dateKey]);
-  }
-
-  function startLongPressSelection(dateKey: string) {
-    if (!pointerStateRef.current.down) return;
-    if (pointerStateRef.current.movedBeforeLongPress) return;
-
-    pointerStateRef.current.selectionActive = true;
-
-    setSelectedDateKey(null);
-    setSelectedEventId(null);
-    setBulkDateKeys([]);
-    setDragKeys([dateKey]);
-    setIsSelecting(true);
-    setErrorMessage("");
-    setSaveMessage("");
-
-    if ("vibrate" in navigator) {
-      navigator.vibrate(25);
-    }
   }
 
   function handlePointerDown(
-    event: ReactPointerEvent<HTMLDivElement>,
+    event: ReactPointerEvent<HTMLButtonElement>,
     dateKey: string
   ) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
+    setErrorMessage("");
     clearLongPressTimer();
 
-    captureElementRef.current = event.currentTarget;
-    capturedPointerIdRef.current = event.pointerId;
-
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
-
-    pointerStateRef.current = {
-      down: true,
-      selectionActive: false,
-      startKey: dateKey,
-      startX: event.clientX,
-      startY: event.clientY,
-      movedBeforeLongPress: false,
+    pointerDownDateRef.current = dateKey;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = {
+      x: event.clientX,
+      y: event.clientY,
     };
 
     longPressTimerRef.current = window.setTimeout(() => {
-      startLongPressSelection(dateKey);
-    }, LONG_PRESS_MS);
+      didLongPressRef.current = true;
+      setIsSelectionActive(true);
+      setSelectedDateKeys(new Set([dateKey]));
+    }, 450);
   }
 
-  function handleCalendarPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!pointerStateRef.current.down) return;
+  function handleCalendarPointerMove(
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    const startPoint = startPointRef.current;
 
-    const dx = event.clientX - pointerStateRef.current.startX;
-    const dy = event.clientY - pointerStateRef.current.startY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (!startPoint || !pointerDownDateRef.current) return;
 
-    if (
-      !pointerStateRef.current.selectionActive &&
-      distance > SCROLL_MOVE_THRESHOLD
-    ) {
-      pointerStateRef.current.movedBeforeLongPress = true;
+    const diffX = Math.abs(event.clientX - startPoint.x);
+    const diffY = Math.abs(event.clientY - startPoint.y);
+
+    if (!didLongPressRef.current && diffX + diffY > 12) {
+      movedTooMuchRef.current = true;
       clearLongPressTimer();
       return;
     }
 
-    if (!pointerStateRef.current.selectionActive) return;
+    if (!didLongPressRef.current) return;
 
     event.preventDefault();
-    event.stopPropagation();
 
-    const target = document.elementFromPoint(
-      event.clientX,
-      event.clientY
-    ) as HTMLElement | null;
-
-    const dateKey = target
-      ?.closest("[data-calendar-date-key]")
-      ?.getAttribute("data-calendar-date-key");
+    const dateKey = getDateKeyFromPoint(event.clientX, event.clientY);
 
     if (!dateKey) return;
 
-    addDragDate(dateKey);
+    setSelectedDateKeys((current) => addDateToSet(current, dateKey));
   }
 
   function handleCalendarPointerUp() {
+    const dateKey = pointerDownDateRef.current;
+    const didLongPress = didLongPressRef.current;
+    const movedTooMuch = movedTooMuchRef.current;
+
     clearLongPressTimer();
 
-    if (!pointerStateRef.current.down) return;
+    if (didLongPress) {
+      setIsBulkModalOpen(true);
+    } else if (dateKey && !movedTooMuch) {
+      const dayEvents = eventsByDate.get(dateKey) ?? [];
+      const firstNormalEvent =
+        dayEvents.find((event) => event.display_type !== "period") ?? null;
 
-    const wasSelecting = pointerStateRef.current.selectionActive;
-    const wasScrollIntent = pointerStateRef.current.movedBeforeLongPress;
-    const startKey = pointerStateRef.current.startKey;
-
-    pointerStateRef.current.down = false;
-    pointerStateRef.current.selectionActive = false;
-    pointerStateRef.current.movedBeforeLongPress = false;
-
-    releasePointerCapture();
-
-    if (wasSelecting) {
-      const selectedKeys = uniqueSortedDateKeys(
-        dragDateKeysRef.current.length > 0
-          ? dragDateKeysRef.current
-          : [startKey]
-      );
-
-      setBulkDateKeys(selectedKeys);
-      setDragKeys(selectedKeys);
-      setIsSelecting(false);
-      return;
+      setSelectedDateKey(dateKey);
+      setSelectedEventId(firstNormalEvent?.id ?? null);
     }
 
-    if (wasScrollIntent) {
-      setIsSelecting(false);
-      setDragKeys([]);
-      return;
-    }
-
-    openDayModal(startKey);
+    pointerDownDateRef.current = null;
+    didLongPressRef.current = false;
+    movedTooMuchRef.current = false;
+    startPointRef.current = null;
+    setIsSelectionActive(false);
   }
 
   function handleCalendarPointerCancel() {
-    clearLongPressTimer();
-    releasePointerCapture();
+    resetPointerState();
+  }
 
-    pointerStateRef.current.down = false;
-    pointerStateRef.current.selectionActive = false;
-    pointerStateRef.current.movedBeforeLongPress = false;
+  async function saveAttendance(input: {
+    eventId: string;
+    status: string;
+    note: string;
+  }) {
+    await updateUserCalendarAttendance({
+      eventId: input.eventId,
+      event_id: input.eventId,
+      status: input.status,
+      note: input.note,
+    });
+  }
 
-    setIsSelecting(false);
-    setDragKeys([]);
+  function handleAttendance(formData: FormData) {
+    setErrorMessage("");
+
+    runLockedAction(async () => {
+      try {
+        const eventId = cleanText(formData.get("event_id"));
+        const status = cleanText(formData.get("status"));
+        const note = cleanText(formData.get("note"));
+
+        await saveAttendance({
+          eventId,
+          status,
+          note,
+        });
+
+        closeSingleModal();
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    });
+  }
+
+  function handleBulkAttendance(formData: FormData) {
+    setErrorMessage("");
+
+    runLockedAction(async () => {
+      try {
+        const eventIds = formData
+          .getAll("event_ids")
+          .map((value) => String(value).trim())
+          .filter(Boolean);
+
+        const status = cleanText(formData.get("status"));
+        const note = cleanText(formData.get("note"));
+
+        if (eventIds.length === 0) {
+          throw new Error("出欠回答できる予定がありません");
+        }
+
+        for (const eventId of eventIds) {
+          await saveAttendance({
+            eventId,
+            status,
+            note,
+          });
+        }
+
+        closeBulkModal();
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    });
+  }
+
+  function renderEventBlock(event: CalendarEvent) {
+    const summary = getEventSummary(event.id);
+
+    return (
+      <div key={event.id}>
+        <div style={calendarTextStyle(event.title, event.title_color)}>
+          {displayText(event.title)}
+        </div>
+
+        {event.location && (
+          <div style={calendarTextStyle(event.location, event.location_color)}>
+            {displayText(event.location)}
+          </div>
+        )}
+
+        {event.time_text && (
+          <div style={calendarTextStyle(event.time_text, event.time_color)}>
+            {displayText(event.time_text)}
+          </div>
+        )}
+
+        {event.attendance_required && (
+          <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
+            <div>指導者:{summary.coachCount}人</div>
+            <div>選手:{summary.playerCount}人</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderSelectedEventDetail(event: CalendarEvent) {
+    const summary = getEventSummary(event.id);
+    const myResponse = myResponsesByEvent.get(event.id);
+    const coachNames = getParticipants(event.id, "admin");
+    const playerNames = getParticipants(event.id, "user");
+
+    return (
+      <section className="mt-5 rounded border border-gray-300 bg-white p-4">
+        <h3 className="text-lg font-bold text-gray-900">{event.title}</h3>
+
+        {event.location && (
+          <p className="mt-1 text-sm font-medium text-gray-700">
+            会場：{event.location}
+          </p>
+        )}
+
+        {event.time_text && (
+          <p className="mt-1 text-sm font-medium text-gray-700">
+            時間：{event.time_text}
+          </p>
+        )}
+
+        {event.description && (
+          <p className="mt-3 rounded bg-gray-50 p-3 text-sm font-medium text-gray-800">
+            {event.description}
+          </p>
+        )}
+
+        {event.attendance_required ? (
+          <>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded bg-green-50 p-2">
+                <p className="font-bold text-green-800">出席</p>
+                <p className="font-bold text-green-900">{summary.attend}人</p>
+              </div>
+
+              <div className="rounded bg-yellow-50 p-2">
+                <p className="font-bold text-yellow-800">未定</p>
+                <p className="font-bold text-yellow-900">{summary.pending}人</p>
+              </div>
+
+              <div className="rounded bg-red-50 p-2">
+                <p className="font-bold text-red-800">欠席</p>
+                <p className="font-bold text-red-900">{summary.absent}人</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded bg-blue-50 p-2">
+                <p className="font-bold text-blue-800">指導者</p>
+                <p className="font-bold text-blue-900">
+                  {summary.coachCount}人
+                </p>
+              </div>
+
+              <div className="rounded bg-gray-50 p-2">
+                <p className="font-bold text-gray-800">選手</p>
+                <p className="font-bold text-gray-900">
+                  {summary.playerCount}人
+                </p>
+              </div>
+            </div>
+
+            <form action={handleAttendance} className="mt-4 space-y-3">
+              <input type="hidden" name="event_id" value={event.id} />
+
+              <div>
+                <label className="block text-sm font-bold text-gray-900">
+                  自分の出欠
+                </label>
+                <select
+                  name="status"
+                  defaultValue={myResponse?.status ?? "attend"}
+                  className={fieldClass}
+                >
+                  <option value="attend">〇 出席</option>
+                  <option value="pending">△ 未定</option>
+                  <option value="absent">× 欠席</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-900">
+                  メモ
+                </label>
+                <input
+                  name="note"
+                  defaultValue={myResponse?.note ?? ""}
+                  className={fieldClass}
+                  placeholder="任意"
+                />
+              </div>
+
+              <SubmitButton
+                busy={isPending}
+                pendingText="保存中..."
+                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+              >
+                出欠を保存
+              </SubmitButton>
+            </form>
+
+            <details className="mt-4 rounded bg-gray-50 p-3">
+              <summary className="cursor-pointer font-bold text-gray-900">
+                参加者一覧
+              </summary>
+
+              <div className="mt-3 space-y-3 text-sm">
+                <div>
+                  <p className="font-bold text-gray-900">指導者</p>
+                  <p className="mt-1 font-medium text-gray-700">
+                    {coachNames.length > 0 ? coachNames.join("、") : "なし"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="font-bold text-gray-900">選手</p>
+                  <p className="mt-1 font-medium text-gray-700">
+                    {playerNames.length > 0 ? playerNames.join("、") : "なし"}
+                  </p>
+                </div>
+              </div>
+            </details>
+          </>
+        ) : (
+          <p className="mt-4 rounded bg-gray-50 p-3 text-sm font-bold text-gray-700">
+            この予定は出欠回答不要です。
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  function renderModalContents() {
+    if (!selectedDateKey) return null;
+
+    const normalEvents = selectedDateEvents.filter(
+      (event) => event.display_type !== "period"
+    );
+    const periodEvents = selectedDateEvents.filter(
+      (event) => event.display_type === "period"
+    );
+
+    return (
+      <>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {formatDate(selectedDateKey)}
+            </h2>
+            <p className="mt-1 text-sm font-medium text-gray-700">
+              予定の確認と出欠回答を行います。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeSingleModal}
+            className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
+          >
+            ×
+          </button>
+        </div>
+
+        {errorMessage && (
+          <div className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        {selectedDateEvents.length === 0 ? (
+          <p className="mt-5 rounded bg-gray-50 p-4 font-medium text-gray-700">
+            この日の予定はありません。
+          </p>
+        ) : (
+          <section className="mt-5 rounded border border-gray-300 bg-white p-4">
+            <h3 className="font-bold text-gray-900">この日の予定</h3>
+
+            <div className="mt-3 space-y-2">
+              {normalEvents.map((event) => {
+                const myResponse = myResponsesByEvent.get(event.id);
+
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => setSelectedEventId(event.id)}
+                    className={
+                      selectedEventId === event.id
+                        ? "w-full rounded border-2 border-black bg-gray-50 p-3 text-left"
+                        : "w-full rounded border border-gray-300 bg-white p-3 text-left"
+                    }
+                  >
+                    <p className="font-bold text-gray-900">{event.title}</p>
+
+                    {(event.location || event.time_text) && (
+                      <p className="mt-1 text-sm font-medium text-gray-700">
+                        {[event.location, event.time_text]
+                          .filter(Boolean)
+                          .join(" / ")}
+                      </p>
+                    )}
+
+                    {event.attendance_required && (
+                      <span
+                        className={`mt-2 inline-block rounded px-2 py-1 text-xs font-bold ${statusClass(
+                          myResponse?.status
+                        )}`}
+                      >
+                        {statusLabel(myResponse?.status)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {periodEvents.map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => setSelectedEventId(event.id)}
+                  className={
+                    selectedEventId === event.id
+                      ? "w-full rounded border-2 border-black bg-teal-50 p-3 text-left"
+                      : "w-full rounded border border-teal-200 bg-teal-50 p-3 text-left"
+                  }
+                >
+                  <p className="font-bold text-teal-900">{event.title}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {selectedEvent ? renderSelectedEventDetail(selectedEvent) : null}
+      </>
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-50 p-3 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">予定・出欠</h1>
-            <p className="mt-2 text-sm text-gray-700">
-              {currentUser.name} さんの予定と出欠回答
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+              カレンダー
+            </h1>
+            <p className="mt-2 text-sm font-medium text-gray-700">
+              日付タップで予定確認・出欠回答、長押しドラッグで複数日にまとめて出欠回答できます。
             </p>
           </div>
 
           <div className="flex gap-2">
-            <a href="/user" className="rounded border bg-white px-4 py-2">
+            <a
+              href="/user"
+              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+            >
               ユーザー画面に戻る
             </a>
-
-            <a href="/logout" className="rounded border bg-white px-4 py-2">
+            <a
+              href="/logout"
+              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+            >
               ログアウト
             </a>
           </div>
         </div>
 
-        <section className="mt-6 rounded-lg bg-white p-2 shadow sm:mt-8 sm:p-4">
-          <div className="flex items-center justify-between gap-3">
-            <a
-              href={`/user/calendar?year=${prev.year}&month=${prev.month}`}
-              className="rounded-full bg-gray-200 px-5 py-3 text-lg font-bold text-gray-900"
-              aria-label="前月"
-            >
-              ◀
-            </a>
-
-            <h2 className="text-center text-2xl font-bold text-gray-900">
-              {currentYear}年 {currentMonth}月
+        <section className="mt-5 rounded-lg bg-white p-4 shadow">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-bold text-gray-900">
+              {formatTargetMonth(targetMonth)}
             </h2>
 
-            <a
-              href={`/user/calendar?year=${next.year}&month=${next.month}`}
-              className="rounded-full bg-gray-200 px-5 py-3 text-lg font-bold text-gray-900"
-              aria-label="翌月"
-            >
-              ▶
-            </a>
+            <div className="flex gap-2">
+              <a
+                href={`/user/calendar?month=${prevMonth}`}
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              >
+                前月
+              </a>
+              <a
+                href={`/user/calendar?month=${currentMonth}`}
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              >
+                今月
+              </a>
+              <a
+                href={`/user/calendar?month=${nextMonth}`}
+                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              >
+                翌月
+              </a>
+            </div>
           </div>
+        </section>
 
-          {isSelecting && (
-            <p className="mt-3 rounded bg-yellow-100 p-2 text-center text-sm font-bold text-yellow-900">
-              選択中：指を動かして日付を追加してください。
-            </p>
-          )}
+        <section
+          className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          onPointerMove={handleCalendarPointerMove}
+          onPointerUp={handleCalendarPointerUp}
+          onPointerCancel={handleCalendarPointerCancel}
+          style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
+        >
+          <div className="grid grid-cols-7 gap-px bg-gray-300">
+            {weekLabels.map((label, index) => (
+              <div
+                key={label}
+                className={
+                  index === 5
+                    ? "bg-blue-50 py-2 text-center text-sm font-bold text-blue-700"
+                    : index === 6
+                      ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
+                      : "bg-white py-2 text-center text-sm font-bold text-gray-900"
+                }
+              >
+                {label}
+              </div>
+            ))}
 
-          <div className="mt-4 overflow-hidden border border-gray-300 bg-gray-300">
-            <div className="grid grid-cols-7 gap-px text-center text-sm font-bold">
-              {WEEKDAYS.map((day) => (
-                <div
-                  key={day.label}
+            {cells.map((cell, index) => {
+              const dayEvents = eventsByDate.get(cell.dateKey) ?? [];
+              const normalEvents = dayEvents.filter(
+                (event) => event.display_type !== "period"
+              );
+              const periodEvents = dayEvents.filter(
+                (event) => event.display_type === "period"
+              );
+
+              const weekIndex = index % 7;
+              const isSaturday = weekIndex === 5;
+              const isSunday = weekIndex === 6;
+              const isHoliday = dayEvents.some((event) => event.is_holiday);
+              const isToday = cell.dateKey === todayKey;
+              const isSelected = selectedDateKeys.has(cell.dateKey);
+
+              const dateColorClass = !cell.isCurrentMonth
+                ? "text-gray-400"
+                : isSunday || isHoliday
+                  ? "text-red-600"
+                  : isSaturday
+                    ? "text-blue-600"
+                    : "text-gray-900";
+
+              return (
+                <button
+                  key={cell.dateKey}
+                  type="button"
+                  data-date-key={cell.dateKey}
+                  onPointerDown={(event) =>
+                    handlePointerDown(event, cell.dateKey)
+                  }
                   className={
-                    day.value === 6
-                      ? "bg-blue-100 p-1 text-blue-900"
-                      : day.value === 0
-                        ? "bg-red-100 p-1 text-red-900"
-                        : "bg-gray-100 p-1 text-gray-900"
+                    cell.isCurrentMonth
+                      ? "flex min-h-32 flex-col bg-white p-1 text-left align-top"
+                      : "flex min-h-32 flex-col bg-gray-100 p-1 text-left align-top text-gray-400"
+                  }
+                  style={
+                    isSelected
+                      ? { boxShadow: "inset 0 0 0 2px #facc15" }
+                      : undefined
                   }
                 >
-                  {day.label}
-                </div>
-              ))}
+                  <div
+                    className={
+                      isToday
+                        ? `inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold ${dateColorClass}`
+                        : `inline-flex h-7 w-7 items-center justify-center text-sm font-bold ${dateColorClass}`
+                    }
+                  >
+                    {cell.day}
+                  </div>
+
+                  <div className="mt-1 space-y-1">
+                    {normalEvents.slice(0, 2).map((event) =>
+                      renderEventBlock(event)
+                    )}
+
+                    {normalEvents.length > 2 && (
+                      <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
+                        他 {normalEvents.length - 2}件
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-auto space-y-1 pt-1">
+                    {periodEvents.slice(0, 1).map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded bg-teal-100 px-1 py-0.5 text-[10px] font-bold text-teal-800"
+                      >
+                        {displayText(event.title)}
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      {selectedDateKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+            {renderModalContents()}
+          </div>
+        </div>
+      )}
+
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  まとめて出欠回答
+                </h2>
+                <p className="mt-1 text-sm font-medium text-gray-700">
+                  選択日数：{selectedDateKeyList.length}日
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeBulkModal}
+                className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
+              >
+                ×
+              </button>
             </div>
 
-            <div
-              className={
-                isSelecting
-                  ? "mt-px grid touch-none select-none grid-cols-7 gap-px text-center"
-                  : "mt-px grid touch-pan-y select-none grid-cols-7 gap-px text-center"
-              }
-              onPointerMove={handleCalendarPointerMove}
-              onPointerUp={handleCalendarPointerUp}
-              onPointerCancel={handleCalendarPointerCancel}
-            >
-              {monthCells.map((cell, index) => {
-                if (!cell) {
-                  return (
-                    <div
-                      key={`empty-${index}`}
-                      className="min-h-[112px] bg-gray-50"
-                    />
-                  );
-                }
+            {errorMessage && (
+              <div className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
+                {errorMessage}
+              </div>
+            )}
 
-                const dayEvents = eventsByDate[cell.dateKey] ?? [];
-
-                const normalEvents = dayEvents.filter(
-                  (event) => event.display_type !== "period"
+            <div className="mt-4 max-h-40 overflow-y-auto rounded bg-gray-50 p-3 text-sm font-bold text-gray-900">
+              {selectedDateKeyList.map((dateKey) => {
+                const dayEvents = (eventsByDate.get(dateKey) ?? []).filter(
+                  (event) =>
+                    event.attendance_required &&
+                    event.display_type !== "period"
                 );
-
-                const periodEvents = dayEvents.filter(
-                  (event) => event.display_type === "period"
-                );
-
-                const hasHolidayEvent = dayEvents.some(
-                  (event) => event.is_holiday
-                );
-
-                const isDraggingSelected = dragDateKeys.includes(cell.dateKey);
-
-                const baseCellClass =
-                  "relative min-h-[112px] cursor-pointer p-1 text-center active:bg-yellow-100 sm:min-h-36";
-
-                const cellClass =
-                  hasHolidayEvent || cell.weekday === 0
-                    ? `${baseCellClass} bg-red-50`
-                    : cell.weekday === 6
-                      ? `${baseCellClass} bg-blue-50`
-                      : `${baseCellClass} bg-white`;
 
                 return (
-                  <div
-                    key={cell.dateKey}
-                    role="button"
-                    tabIndex={0}
-                    data-calendar-date-key={cell.dateKey}
-                    className={cellClass}
-                    style={
-                      isDraggingSelected
-                        ? {
-                            boxShadow: "inset 0 0 0 2px #facc15",
-                            backgroundColor: "#fef9c3",
-                          }
-                        : undefined
-                    }
-                    onPointerDown={(event) =>
-                      handlePointerDown(event, cell.dateKey)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        openDayModal(cell.dateKey);
-                      }
-                    }}
-                  >
-                    <div className="flex justify-center">
-                      <span
-                        className={
-                          todayKey === cell.dateKey
-                            ? "flex h-7 w-7 items-center justify-center rounded-full bg-black text-base font-bold text-white"
-                            : "flex h-7 w-7 items-center justify-center text-base font-bold text-gray-900"
-                        }
-                      >
-                        {cell.day}
-                      </span>
-                    </div>
-
-                    <div className="mt-1 space-y-1">
-                      {normalEvents.slice(0, 2).map((event) => {
-                        const summary = summariesByEvent[event.id];
-                        const currentStatus = localResponses[event.id] ?? "";
-
-                        return (
-                          <button
-                            key={event.id}
-                            type="button"
-                            onPointerDown={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onPointerUp={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onClick={(clickEvent) => {
-                              clickEvent.stopPropagation();
-                              openEventModal(cell.dateKey, event.id);
-                            }}
-                            className="block w-full rounded bg-white px-0 py-1 text-center leading-tight shadow-sm"
-                          >
-                            <span
-                              className="block font-bold"
-                              style={calendarTextStyle(
-                                event.title,
-                                event.title_color
-                              )}
-                            >
-                              {displayText(event.title)}
-                            </span>
-
-                            {event.location && (
-                              <span
-                                className="mt-0.5 block"
-                                style={calendarTextStyle(
-                                  event.location,
-                                  event.location_color
-                                )}
-                              >
-                                {displayText(event.location)}
-                              </span>
-                            )}
-
-                            {event.time_text && (
-                              <span
-                                className="mt-0.5 block"
-                                style={calendarTextStyle(
-                                  event.time_text,
-                                  event.time_color
-                                )}
-                              >
-                                {displayText(event.time_text)}
-                              </span>
-                            )}
-
-                            {event.attendance_required && summary && (
-                              <span className="mt-0.5 block text-[9px] font-medium leading-tight text-gray-900">
-                                指導者:{summary.coachAttend}
-                                <br />
-                                選手:{summary.playerAttend}
-                              </span>
-                            )}
-
-                            {event.attendance_required && (
-                              <span
-                                className={`mt-1 block rounded px-1 py-0.5 text-[10px] font-bold ${statusPillClass(
-                                  currentStatus
-                                )}`}
-                              >
-                                {statusCalendarLabel(currentStatus)}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-
-                      {normalEvents.length > 2 && (
-                        <button
-                          type="button"
-                          onPointerDown={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onPointerUp={(pointerEvent) =>
-                            pointerEvent.stopPropagation()
-                          }
-                          onClick={(clickEvent) => {
-                            clickEvent.stopPropagation();
-                            openDayModal(cell.dateKey);
-                          }}
-                          className="block w-full rounded bg-gray-100 px-1 py-0.5 text-[9px] font-bold text-gray-700"
-                        >
-                          +{normalEvents.length - 2}件
-                        </button>
-                      )}
-                    </div>
-
-                    {periodEvents.length > 0 && (
-                      <div className="mt-1 space-y-1 border-t border-gray-300 pt-1">
-                        {periodEvents.slice(0, 1).map((event) => (
-                          <button
-                            key={event.id}
-                            type="button"
-                            onPointerDown={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onPointerUp={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onClick={(clickEvent) => {
-                              clickEvent.stopPropagation();
-                              openEventModal(cell.dateKey, event.id);
-                            }}
-                            className="block w-full rounded bg-teal-500 px-0 py-1 text-center font-bold leading-tight text-white"
-                          >
-                            <span
-                              className="block font-bold"
-                              style={calendarTextStyle(event.title, "#ffffff")}
-                            >
-                              {displayText(event.title)}
-                            </span>
-                          </button>
-                        ))}
-
-                        {periodEvents.length > 1 && (
-                          <button
-                            type="button"
-                            onPointerDown={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onPointerUp={(pointerEvent) =>
-                              pointerEvent.stopPropagation()
-                            }
-                            onClick={(clickEvent) => {
-                              clickEvent.stopPropagation();
-                              openDayModal(cell.dateKey);
-                            }}
-                            className="block w-full rounded bg-teal-100 px-1 py-0.5 text-[9px] font-bold text-teal-800"
-                          >
-                            +{periodEvents.length - 1}件
-                          </button>
-                        )}
+                  <div key={dateKey} className="border-b border-gray-200 py-2">
+                    <div>{formatDate(dateKey)}</div>
+                    {dayEvents.length > 0 ? (
+                      <div className="mt-1 text-xs font-medium text-gray-700">
+                        {dayEvents.map((event) => event.title).join(" / ")}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs font-medium text-gray-500">
+                        出欠回答対象の予定なし
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
-          </div>
-        </section>
 
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <h2 className="text-lg font-bold">操作方法</h2>
+            <form action={handleBulkAttendance} className="mt-5 space-y-4">
+              {selectedBulkEvents.map((event) => (
+                <input
+                  key={event.id}
+                  type="hidden"
+                  name="event_ids"
+                  value={event.id}
+                />
+              ))}
 
-          <p className="mt-2 text-sm text-gray-700">
-            日付タイルまたは予定をタップすると、詳細モーダルが開きます。
-            複数日を選ぶ場合は、日付を長押ししてからドラッグしてください。
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">
-            <span className="rounded bg-green-100 px-3 py-1 text-green-800">
-              〇 出席
-            </span>
-            <span className="rounded bg-yellow-100 px-3 py-1 text-yellow-800">
-              △ 未定
-            </span>
-            <span className="rounded bg-red-100 px-3 py-1 text-red-800">
-              × 欠席
-            </span>
-            <span className="rounded bg-orange-100 px-3 py-1 text-orange-800">
-              未 未回答
-            </span>
-            <span className="rounded bg-teal-100 px-3 py-1 text-teal-800">
-              期間予定
-            </span>
-          </div>
-        </section>
-      </div>
-
-      {bulkDateKeys.length > 0 && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
-          onClick={closeModal}
-        >
-          <div
-            className="max-h-[calc(100vh-24px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-gray-600">
-                  {bulkDateKeys.length}日分を選択中
-                </p>
-                <h2 className="mt-1 text-xl font-bold">まとめて出欠回答</h2>
+                <label className="block text-sm font-bold text-gray-900">
+                  出欠
+                </label>
+                <select
+                  name="status"
+                  defaultValue="attend"
+                  className={fieldClass}
+                >
+                  <option value="attend">〇 出席</option>
+                  <option value="pending">△ 未定</option>
+                  <option value="absent">× 欠席</option>
+                </select>
               </div>
 
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-full bg-gray-100 px-3 py-1 text-xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-4 rounded bg-yellow-50 p-3 text-sm text-yellow-900">
-              選択した日付内の「出欠回答が必要な予定」にまとめて回答します。
-              出欠不要の予定は一覧には表示しますが、保存対象からは除外します。
-            </div>
-
-            <div className="mt-4">
-              <p className="text-sm font-bold">選択日</p>
-
-              <div className="mt-2 flex flex-wrap gap-2">
-                {bulkDateKeys.map((dateKey) => (
-                  <button
-                    key={dateKey}
-                    type="button"
-                    onClick={() => removeBulkDate(dateKey)}
-                    className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-900"
-                  >
-                    {formatShortDateLabel(dateKey)} ×
-                  </button>
-                ))}
-              </div>
-
-              <p className="mt-2 text-xs text-gray-500">
-                不要な日付はタップすると選択から外せます。
-              </p>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {bulkEvents.length === 0 ? (
-                <p className="rounded bg-gray-50 p-3 text-sm text-gray-600">
-                  選択範囲に予定はありません。
-                </p>
-              ) : (
-                bulkEvents.map(({ dateKey, event }) => {
-                  const currentStatus = localResponses[event.id] ?? "";
-
-                  return (
-                    <div
-                      key={`${dateKey}-${event.id}`}
-                      className="rounded border bg-white p-3"
-                    >
-                      <p className="text-xs text-gray-500">
-                        {formatDateLabel(dateKey)}
-                      </p>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <p className="font-bold">{event.title}</p>
-
-                        {event.display_type === "period" && (
-                          <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                            期間予定
-                          </span>
-                        )}
-
-                        {!event.attendance_required && (
-                          <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                            出欠不要
-                          </span>
-                        )}
-
-                        {event.attendance_required && (
-                          <span
-                            className={`rounded px-2 py-1 text-xs font-bold ${statusPillClass(
-                              currentStatus
-                            )}`}
-                          >
-                            {statusLongLabel(currentStatus)}
-                          </span>
-                        )}
-                      </div>
-
-                      {event.time_text && (
-                        <p className="mt-1 text-sm text-gray-700">
-                          時間：{event.time_text}
-                        </p>
-                      )}
-
-                      {event.location && (
-                        <p className="mt-1 text-sm text-gray-700">
-                          場所：{event.location}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-5">
-              <p className="text-sm font-bold">
-                保存対象：{bulkAnswerTargets.length}件
-              </p>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {STATUS_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    disabled={isPending || bulkAnswerTargets.length === 0}
-                    onClick={() => saveBulkAttendance(option.value)}
-                    className="rounded border border-gray-300 bg-white px-3 py-3 text-sm font-bold text-gray-800 disabled:opacity-40"
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-3 min-h-5 text-sm">
-                {isPending && <span className="text-gray-600">保存中...</span>}
-
-                {!isPending && saveMessage && (
-                  <span className="text-green-700">{saveMessage}</span>
-                )}
-
-                {!isPending && errorMessage && (
-                  <span className="text-red-600">{errorMessage}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedDateKey && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3"
-          onClick={closeModal}
-        >
-          <div
-            className="max-h-[calc(100vh-24px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-gray-600">
-                  {formatDateLabel(selectedDateKey)}
-                </p>
-                <h2 className="mt-1 text-xl font-bold">予定詳細</h2>
+                <label className="block text-sm font-bold text-gray-900">
+                  メモ
+                </label>
+                <input name="note" className={fieldClass} placeholder="任意" />
               </div>
 
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-full bg-gray-100 px-3 py-1 text-xl font-bold"
+              <SubmitButton
+                busy={isPending}
+                pendingText="保存中..."
+                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
               >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-sm font-bold">この日の予定</p>
-
-              {selectedDateEvents.length === 0 ? (
-                <p className="mt-2 rounded bg-gray-50 p-3 text-sm text-gray-600">
-                  この日の予定はありません。
-                </p>
-              ) : (
-                <div className="mt-2 space-y-2">
-                  {selectedDateEvents.map((event) => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => setSelectedEventId(event.id)}
-                      className={
-                        selectedEventId === event.id
-                          ? "block w-full rounded border-2 border-black bg-gray-50 p-3 text-left"
-                          : "block w-full rounded border bg-white p-3 text-left"
-                      }
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p
-                          className="font-bold"
-                          style={{ color: event.title_color || "#111827" }}
-                        >
-                          {event.title}
-                        </p>
-
-                        {event.display_type === "period" && (
-                          <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                            期間予定
-                          </span>
-                        )}
-
-                        {!event.attendance_required && (
-                          <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                            出欠不要
-                          </span>
-                        )}
-                      </div>
-
-                      {event.time_text && (
-                        <p
-                          className="mt-1 text-sm"
-                          style={{ color: event.time_color || "#111827" }}
-                        >
-                          時間：{event.time_text}
-                        </p>
-                      )}
-
-                      {event.location && (
-                        <p
-                          className="mt-1 text-sm"
-                          style={{ color: event.location_color || "#111827" }}
-                        >
-                          場所：{event.location}
-                        </p>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {selectedEvent && (
-              <section className="mt-5 rounded-lg border bg-white p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3
-                    className="text-xl font-bold"
-                    style={{ color: selectedEvent.title_color || "#111827" }}
-                  >
-                    {selectedEvent.title}
-                  </h3>
-
-                  {selectedEvent.is_holiday && (
-                    <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">
-                      祝日扱い
-                    </span>
-                  )}
-
-                  {selectedEvent.display_type === "period" && (
-                    <span className="rounded bg-teal-100 px-2 py-1 text-xs text-teal-800">
-                      期間予定
-                    </span>
-                  )}
-
-                  {!selectedEvent.attendance_required && (
-                    <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                      出欠不要
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-3 space-y-1 text-sm">
-                  <p style={{ color: selectedEvent.location_color || "#111827" }}>
-                    場所：{selectedEvent.location || "未設定"}
-                  </p>
-
-                  <p style={{ color: selectedEvent.time_color || "#111827" }}>
-                    時間：{selectedEvent.time_text || "未設定"}
-                  </p>
-                </div>
-
-                {selectedEvent.description && (
-                  <p className="mt-3 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm text-gray-700">
-                    {selectedEvent.description}
-                  </p>
-                )}
-
-                {selectedEvent.attendance_required ? (
-                  <>
-                    <div className="mt-4 rounded bg-gray-50 p-3 text-sm">
-                      <p className="font-bold">集計</p>
-
-                      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                        <div className="rounded bg-green-100 p-2 text-green-800">
-                          <p className="text-xs">出席</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.attend ?? 0}
-                          </p>
-                        </div>
-
-                        <div className="rounded bg-yellow-100 p-2 text-yellow-800">
-                          <p className="text-xs">未定</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.pending ?? 0}
-                          </p>
-                        </div>
-
-                        <div className="rounded bg-red-100 p-2 text-red-800">
-                          <p className="text-xs">欠席</p>
-                          <p className="text-lg font-bold">
-                            {summariesByEvent[selectedEvent.id]?.absent ?? 0}
-                          </p>
-                        </div>
-                      </div>
-
-                      <p className="mt-2 text-center text-sm text-gray-700">
-                        指導者：
-                        {summariesByEvent[selectedEvent.id]?.coachAttend ?? 0}
-                        　選手：
-                        {summariesByEvent[selectedEvent.id]?.playerAttend ?? 0}
-                      </p>
-                    </div>
-
-                    <div className="mt-4">
-                      <p className="text-sm font-bold">
-                        現在の回答：
-                        {statusLongLabel(localResponses[selectedEvent.id] ?? "")}
-                      </p>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {STATUS_OPTIONS.map((option) => {
-                          const currentStatus =
-                            localResponses[selectedEvent.id] ?? "";
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              disabled={isPending}
-                              onClick={() =>
-                                saveAttendance(selectedEvent.id, option.value)
-                              }
-                              className={`rounded border px-3 py-3 text-sm font-bold ${statusButtonClass(
-                                option.value,
-                                currentStatus
-                              )}`}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-3 min-h-5 text-sm">
-                        {isPending && (
-                          <span className="text-gray-600">保存中...</span>
-                        )}
-
-                        {!isPending && saveMessage && (
-                          <span className="text-green-700">{saveMessage}</span>
-                        )}
-
-                        {!isPending && errorMessage && (
-                          <span className="text-red-600">{errorMessage}</span>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="mt-4 rounded bg-gray-50 p-3 text-sm text-gray-600">
-                    この予定は出欠回答不要です。
-                  </p>
-                )}
-              </section>
-            )}
+                選択日の予定にまとめて保存
+              </SubmitButton>
+            </form>
           </div>
         </div>
       )}
