@@ -144,7 +144,7 @@ export default async function RegisterPage({ searchParams }: PageProps) {
 
           <SubmitButton 
             pendingText="申請中..."
-            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
+            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white"
           >
             登録申請
           </SubmitButton>
