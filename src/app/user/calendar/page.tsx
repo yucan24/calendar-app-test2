@@ -213,7 +213,6 @@ export default async function UserCalendarPage({ searchParams }: PageProps) {
       currentUser={{
         id: currentUser.id,
         name: currentUser.name,
-        group_id: currentUser.group_id,
       }}
       currentYear={currentYear}
       currentMonth={currentMonth}
