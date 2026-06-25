@@ -219,7 +219,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <div className="flex min-w-0 items-end">
                 <Submitbutton
                   pendingText="一括作成中..."
-                  className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                  className="w-full rounded bg-black px-4 py-3 font-bold text-white"
                 >
                   一括作成
                 </Submitbutton>
@@ -394,7 +394,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       <div className="flex min-w-0 items-end">
                         <SubmitButton 
                           pendingText="追加中・・・"
-                          className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                          className="w-full rounded bg-black px-4 py-3 font-bold text-white"
                         >
                           追加
                         </SubmitButton>
