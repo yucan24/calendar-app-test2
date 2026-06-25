@@ -48,7 +48,24 @@ async function register(formData: FormData) {
   if (existing) {
     redirect("/register?error=exists");
   }
-
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", group.id)
+    .eq("name", name)
+    .maybeSingle();
+  
+  if (existingProfileError) {
+    redirect(`/register?error=${encodeURIComponent(existingProfileError.message)}`);
+  }
+  
+  if (existingProfile) {
+    redirect(
+      `/register?error=${encodeURIComponent(
+        "同じ名前の会員が既に登録されています。管理者に確認してください。"
+      )}`
+    );
+  }
   const { error } = await supabase.from("profiles").insert({
     group_id: group.id,
     role: "user",
