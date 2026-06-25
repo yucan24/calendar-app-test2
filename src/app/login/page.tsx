@@ -117,7 +117,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           </div>
           <SubmitButton
             pendingText="ログイン中..."
-            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white">
+            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white"
           >
             ログイン
           </SubmitButton>
