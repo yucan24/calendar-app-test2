@@ -32,44 +32,116 @@ async function getMemberOrThrow(memberId: string, groupId: string) {
   return member;
 }
 
-export async function updateMemberProfile(formData: FormData) {
+export type MemberActionState = {
+  ok: boolean;
+  message: string;
+};
+
+function normalizeName(value: FormDataEntryValue | null) {
+  return String(value ?? "").replace(/\s+/g, "").trim();
+}
+
+function cleanText(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
+}
+
+function isDuplicateNameError(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function updateMemberProfile(
+  _prevState: MemberActionState,
+  formData: FormData
+): Promise<MemberActionState> {
   const admin = await requireAdmin();
 
   const memberId = cleanText(formData.get("member_id"));
-  const name = cleanName(formData.get("name"));
+  const name = normalizeName(formData.get("name"));
   const email = cleanText(formData.get("email"));
   const loginCode = cleanText(formData.get("login_code"));
-  
-　const { data: duplicateProfile, error: duplicateProfileError } = await supabase
-  .from("profiles")
-  .select("id")
-  .eq("group_id", admin.group_id)
-  .eq("name", name)
-  .neq("id", memberId)
-  .maybeSingle();
 
-if (duplicateProfileError) {
-  throw new Error(duplicateProfileError.message);
-}
-
-if (duplicateProfile) {
-  throw new Error("同じ名前の会員が既に登録されています。");
-}
   if (!memberId) {
-    throw new Error("会員IDが不明です");
+    return {
+      ok: false,
+      message: "会員IDが不明です。",
+    };
   }
 
-  if (!name || !email || !loginCode) {
-    throw new Error("名前、メールアドレス、4桁コードを入力してください");
+  if (!name) {
+    return {
+      ok: false,
+      message: "名前を入力してください。",
+    };
+  }
+
+  if (!email) {
+    return {
+      ok: false,
+      message: "メールアドレスを入力してください。",
+    };
   }
 
   if (!/^\d{4}$/.test(loginCode)) {
-    throw new Error("4桁コードは数字4桁で入力してください");
+    return {
+      ok: false,
+      message: "ログインコードは4桁の数字で入力してください。",
+    };
   }
 
-  await getMemberOrThrow(memberId, admin.group_id);
+  const { data: targetMember, error: targetMemberError } = await supabase
+    .from("profiles")
+    .select("id, group_id")
+    .eq("id", memberId)
+    .maybeSingle();
 
-  const { error } = await supabase
+  if (targetMemberError) {
+    return {
+      ok: false,
+      message: targetMemberError.message,
+    };
+  }
+
+  if (!targetMember || targetMember.group_id !== admin.group_id) {
+    return {
+      ok: false,
+      message: "この会員を編集する権限がありません。",
+    };
+  }
+
+  const { data: duplicateProfile, error: duplicateProfileError } =
+    await supabase
+      .from("profiles")
+      .select("id")
+      .eq("group_id", admin.group_id)
+      .eq("name", name)
+      .neq("id", memberId)
+      .limit(1)
+      .maybeSingle();
+
+  if (duplicateProfileError) {
+    return {
+      ok: false,
+      message: duplicateProfileError.message,
+    };
+  }
+
+  if (duplicateProfile) {
+    return {
+      ok: false,
+      message: "この名前は既に登録済みです。",
+    };
+  }
+
+  const { error: updateError } = await supabase
     .from("profiles")
     .update({
       name,
@@ -79,11 +151,26 @@ if (duplicateProfile) {
     .eq("id", memberId)
     .eq("group_id", admin.group_id);
 
-  if (error) {
-    throw new Error(error.message);
+  if (updateError) {
+    if (isDuplicateNameError(updateError)) {
+      return {
+        ok: false,
+        message: "この名前は既に登録済みです。",
+      };
+    }
+
+    return {
+      ok: false,
+      message: updateError.message,
+    };
   }
 
   revalidatePath("/admin/members");
+
+  return {
+    ok: true,
+    message: "登録情報を更新しました。",
+  };
 }
 
 export async function updateMemberLoginEnabled(formData: FormData) {
