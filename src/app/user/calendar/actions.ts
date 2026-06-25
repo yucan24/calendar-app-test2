@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { requireUser } from "@/lib/auth";
 
-type AttendanceInput =
-  | FormData
-  | {
-      eventId?: string;
-      event_id?: string;
-      status?: string;
-      note?: string;
-    };
+type AttendanceObjectInput = {
+  eventId?: string;
+  event_id?: string;
+  status?: string;
+  note?: string;
+};
+
+type AttendanceInput = FormData | AttendanceObjectInput;
 
 function cleanText(value: unknown) {
   return String(value ?? "").trim();
@@ -22,7 +22,7 @@ function getInputValue(input: AttendanceInput, key: string) {
     return cleanText(input.get(key));
   }
 
-  return cleanText(input[key as keyof AttendanceInput]);
+  return cleanText(input[key as keyof AttendanceObjectInput]);
 }
 
 function getEventId(input: AttendanceInput) {
@@ -70,6 +70,12 @@ async function getEventOrThrow(eventId: string, groupId: string) {
   return event;
 }
 
+/**
+ * ユーザー側カレンダーの出欠保存。
+ *
+ * 新しい標準名は updateUserCalendarAttendance。
+ * UserCalendarClient.tsx からはこの関数を使う。
+ */
 export async function updateUserCalendarAttendance(input: AttendanceInput) {
   const user = await requireUser();
 
@@ -98,4 +104,30 @@ export async function updateUserCalendarAttendance(input: AttendanceInput) {
 
   revalidatePath("/user/calendar");
   revalidatePath("/admin/calendar");
+}
+
+/**
+ * 旧名との互換用。
+ *
+ * AttendanceSelect.tsx などで
+ * import { updateUserAttendance } from "./actions";
+ * が残っていても動くようにしている。
+ *
+ * 処理本体は updateUserCalendarAttendance に統一。
+ */
+export async function updateUserAttendance(
+  input: AttendanceInput | string,
+  status?: string,
+  note?: string
+) {
+  if (typeof input === "string") {
+    return updateUserCalendarAttendance({
+      eventId: input,
+      event_id: input,
+      status,
+      note: note ?? "",
+    });
+  }
+
+  return updateUserCalendarAttendance(input);
 }
