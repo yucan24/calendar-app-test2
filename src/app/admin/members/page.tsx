@@ -201,7 +201,7 @@ export default async function AdminMembersPage() {
                       <div className="sm:col-span-3">
                         <SubmitButton
                           pendingText="更新中・・・"
-                          className="rounded bg-black px-4 py-3 font-bold text-white">
+                          className="rounded bg-black px-4 py-3 font-bold text-white"
                         >
                           登録情報を更新
                         </SubmitButton>
