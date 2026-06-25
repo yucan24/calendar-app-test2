@@ -715,21 +715,21 @@ function renderEventBlock(event: CalendarEvent) {
 
       {event.attendance_required && (
         <>
-          <div
-            className={`mt-0.5 w-full rounded px-1 py-0.5 text-center text-[10px] font-black leading-tight ${statusClass(
-              myResponse?.status
-            )}`}
-          >
-            <span className="inline-block w-full tracking-[0.35em] pl-[0.35em]">
-              {myResponse?.status === "attend"
-                ? "〇"
-                : myResponse?.status === "absent"
-                  ? "×"
-                  : myResponse?.status === "pending"
-                    ? "△"
-                    : "未回答"}
-            </span>
-          </div>
+        <div
+          className={`mt-0.5 w-full rounded px-1 py-0.5 text-center text-[10px] font-black leading-tight ${statusClass(
+            myResponse?.status
+          )}`}
+        >
+          <span className="inline-block w-full">
+            {myResponse?.status === "attend"
+              ? "〇"
+              : myResponse?.status === "absent"
+                ? "×"
+                : myResponse?.status === "pending"
+                  ? "△"
+                  : "未回答"}
+          </span>
+        </div>
 
           <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
             <div>指導者:{summary.coachCount}人</div>
