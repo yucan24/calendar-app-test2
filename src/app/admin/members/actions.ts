@@ -39,7 +39,22 @@ export async function updateMemberProfile(formData: FormData) {
   const name = cleanName(formData.get("name"));
   const email = cleanText(formData.get("email"));
   const loginCode = cleanText(formData.get("login_code"));
+  
+　const { data: duplicateProfile, error: duplicateProfileError } = await supabase
+  .from("profiles")
+  .select("id")
+  .eq("group_id", admin.group_id)
+  .eq("name", name)
+  .neq("id", memberId)
+  .maybeSingle();
 
+if (duplicateProfileError) {
+  throw new Error(duplicateProfileError.message);
+}
+
+if (duplicateProfile) {
+  throw new Error("同じ名前の会員が既に登録されています。");
+}
   if (!memberId) {
     throw new Error("会員IDが不明です");
   }
