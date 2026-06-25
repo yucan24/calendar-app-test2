@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import SubmitButton from "@/components/SubmitButton";
+import MemberProfileForm from "./MemberProfileForm";
 
 import {
   updateMemberLoginEnabled,
@@ -159,54 +160,14 @@ export default async function AdminMembersPage() {
                       登録情報を編集
                     </summary>
 
-                    <form action={updateMemberProfile} className="mt-4 grid gap-3 sm:grid-cols-3">
-                      <input type="hidden" name="member_id" value={member.id} />
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          名前
-                        </label>
-                        <input
-                          name="name"
-                          defaultValue={member.name}
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          メールアドレス
-                        </label>
-                        <input
-                          name="email"
-                          type="email"
-                          defaultValue={member.email}
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          4桁コード
-                        </label>
-                        <input
-                          name="login_code"
-                          inputMode="numeric"
-                          maxLength={4}
-                          defaultValue={member.login_code ?? ""}
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="sm:col-span-3">
-                        <SubmitButton
-                          pendingText="更新中・・・"
-                          className="rounded bg-black px-4 py-3 font-bold text-white"
-                        >
-                          登録情報を更新
-                        </SubmitButton>
-                      </div>
-                    </form>
+                    <MemberProfileForm
+                        member={{
+                          id: member.id,
+                          name: member.name,
+                          email: member.email,
+                          login_code: member.login_code,
+                        }}
+                      />
                   </details>
 
                   <details className="mt-4 rounded bg-gray-50 p-4">
