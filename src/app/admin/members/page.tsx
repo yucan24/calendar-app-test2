@@ -221,7 +221,7 @@ export default async function AdminMembersPage() {
                           <input type="hidden" name="role" value="user" />
                           <SubmitButton
                             disabled={isSelf}
-                            pendingTsxt="処理中・・・"
+                            pendingText="処理中・・・"
                             className="w-full rounded bg-gray-700 px-4 py-3 font-bold text-white disabled:opacity-40"
                           >
                             管理者権限を削除
