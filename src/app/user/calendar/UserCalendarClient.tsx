@@ -665,7 +665,7 @@ function renderEventBlock(event: CalendarEvent) {
               myResponse?.status
             )}`}
           >
-            <span className="inline-block w-full tracking-[0.35em] pl-[0.35em]">
+            <span className="inline-block w-full">
               {myResponse?.status === "attend"
                 ? "〇"
                 : myResponse?.status === "absent"
