@@ -71,9 +71,6 @@ function getRawValue(input: EventInput, key: string) {
   return (input as Record<string, unknown>)[key];
 }
 
-  return input[key];
-}
-
 function hasInputKey(input: EventInput, key: string) {
   if (input instanceof FormData) {
     return input.has(key);
