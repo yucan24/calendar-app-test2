@@ -52,6 +52,11 @@ export default function SubmitButton({
       type={buttonType}
       disabled={isBusy}
       aria-disabled={isBusy}
+      aria-label={
+        isBusy && typeof pendingText === "string"
+          ? pendingText
+          : props["aria-label"]
+      }
       data-busy={isBusy ? "true" : "false"}
       onClick={(event) => {
         if (clickedRef.current || pending || busy || disabled) {
@@ -79,7 +84,7 @@ export default function SubmitButton({
       }}
       className={`${className} disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50`}
     >
-      {isBusy ? pendingText : children}
+      {children}
     </button>
   );
 }

@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import SubmitButton from "@/components/SubmitButton";
 
 type CalendarEvent = {
   id: string;
@@ -443,9 +444,9 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
   </p>
 </div>
 
-            <button className="rounded bg-black px-4 py-2 text-white">
+            <SubmitButton className="rounded bg-black px-4 py-2 text-white">
               予定を登録
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
@@ -484,9 +485,9 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
                     <form action={deleteEvent}>
                       <input type="hidden" name="event_id" value={event.id} />
                       <input type="hidden" name="date" value={selectedDate} />
-                      <button className="rounded border border-red-300 px-3 py-2 text-sm text-red-700">
+                      <SubmitButton className="rounded border border-red-300 px-3 py-2 text-sm text-red-700">
                         削除
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>

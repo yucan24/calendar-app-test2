@@ -86,13 +86,11 @@ export default function AdminAttendanceSelect({
         </p>
       </div>
 
-      <div className="min-h-5 text-xs">
-        {isPending && <span className="text-gray-500">保存中...</span>}
-        {!isPending && !errorMessage && (
-          <span className="text-gray-500">保存済み</span>
-        )}
-        {errorMessage && <span className="text-red-600">{errorMessage}</span>}
-      </div>
+      {errorMessage && (
+        <div className="text-xs">
+          <span className="text-red-600">{errorMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,12 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import SubmitButton from "@/components/SubmitButton";
+import BillingStatusButtons from "./BillingStatusButtons";
 
 import {
   createBillingItem,
   createTuitionForAllUsers,
   updateBillingItem,
-  updateBillingItemStatus,
 } from "./actions";
 import {
   formatTargetMonth,
@@ -460,55 +460,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                 )}
                               </div>
 
-                              <div className="grid grid-cols-3 gap-2 sm:w-72">
-                                <form action={updateBillingItemStatus}>
-                                  <input
-                                    type="hidden"
-                                    name="item_id"
-                                    value={item.id}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="status"
-                                    value="paid"
-                                  />
-                                  <button className="w-full rounded bg-green-600 px-3 py-2 text-sm font-bold text-white">
-                                    済
-                                  </button>
-                                </form>
-
-                                <form action={updateBillingItemStatus}>
-                                  <input
-                                    type="hidden"
-                                    name="item_id"
-                                    value={item.id}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="status"
-                                    value="unpaid"
-                                  />
-                                  <button className="w-full rounded bg-red-600 px-3 py-2 text-sm font-bold text-white">
-                                    未
-                                  </button>
-                                </form>
-
-                                <form action={updateBillingItemStatus}>
-                                  <input
-                                    type="hidden"
-                                    name="item_id"
-                                    value={item.id}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="status"
-                                    value="exempt"
-                                  />
-                                  <button className="w-full rounded bg-gray-700 px-3 py-2 text-sm font-bold text-white">
-                                    免除
-                                  </button>
-                                </form>
-                              </div>
+                              <BillingStatusButtons
+                                itemId={item.id}
+                                currentStatus={item.status}
+                              />
                             </div>
 
                             <details className="mt-4 rounded bg-gray-50 p-3">
@@ -573,9 +528,9 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                 </div>
 
                                 <div className="flex min-w-0 items-end">
-                                  <button className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                                  <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
                                     修正
-                                  </button>
+                                  </SubmitButton>
                                 </div>
 
                                 <div className="min-w-0 sm:col-span-4">

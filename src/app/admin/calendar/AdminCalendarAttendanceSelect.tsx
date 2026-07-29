@@ -57,13 +57,11 @@ export default function AdminCalendarAttendanceSelect({
         <option value="absent">×</option>
       </select>
 
-      <div className="mt-1 min-h-4 text-[10px]">
-        {isPending && <span className="text-gray-500">保存中...</span>}
-        {!isPending && !errorMessage && status && (
-          <span className="text-gray-500">保存済み</span>
-        )}
-        {errorMessage && <span className="text-red-600">{errorMessage}</span>}
-      </div>
+      {errorMessage && (
+        <div className="mt-1 text-[10px]">
+          <span className="text-red-600">{errorMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

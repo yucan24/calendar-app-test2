@@ -105,9 +105,9 @@ export default async function AdminMembersPage() {
                     <form action={updateMemberLoginEnabled}>
                       <input type="hidden" name="member_id" value={member.id} />
                       <input type="hidden" name="login_enabled" value="true" />
-                      <button className="rounded bg-green-600 px-4 py-2 font-bold text-white">
+                      <SubmitButton className="rounded bg-green-600 px-4 py-2 font-bold text-white">
                         承認する
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </article>
@@ -192,21 +192,21 @@ export default async function AdminMembersPage() {
                         <form action={updateMemberRole}>
                           <input type="hidden" name="member_id" value={member.id} />
                           <input type="hidden" name="role" value="admin" />
-                          <button className="w-full rounded bg-blue-600 px-4 py-3 font-bold text-white">
+                          <SubmitButton className="w-full rounded bg-blue-600 px-4 py-3 font-bold text-white">
                             管理者権限を付与
-                          </button>
+                          </SubmitButton>
                         </form>
                       )}
 
                       <form action={updateMemberLoginEnabled}>
                         <input type="hidden" name="member_id" value={member.id} />
                         <input type="hidden" name="login_enabled" value="false" />
-                        <button
+                        <SubmitButton
                           disabled={isSelf}
                           className="w-full rounded bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-40"
                         >
                           ログイン不可にする
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
 

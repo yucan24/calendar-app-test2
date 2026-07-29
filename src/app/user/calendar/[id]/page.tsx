@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireUser } from "@/lib/auth";
+import SubmitButton from "@/components/SubmitButton";
 
 type PageProps = {
   params: Promise<{
@@ -303,9 +304,9 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
                 />
               </div>
 
-              <button className="rounded bg-black px-4 py-2 text-white">
+              <SubmitButton className="rounded bg-black px-4 py-2 text-white">
                 回答を保存
-              </button>
+              </SubmitButton>
             </form>
           </section>
         )}

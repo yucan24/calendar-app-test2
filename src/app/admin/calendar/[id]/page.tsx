@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
+import SubmitButton from "@/components/SubmitButton";
 import AdminAttendanceSelect from "./AdminAttendanceSelect";
 
 type PageProps = {
@@ -540,16 +541,16 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               </div>
             </details>
 
-            <button className="rounded bg-black px-4 py-2 text-white">
+            <SubmitButton className="rounded bg-black px-4 py-2 text-white">
               更新する
-            </button>
+            </SubmitButton>
           </form>
 
           <form action={deleteEvent} className="mt-4">
             <input type="hidden" name="id" value={event.id} />
-            <button className="rounded border border-red-300 px-4 py-2 text-red-700">
+            <SubmitButton className="rounded border border-red-300 px-4 py-2 text-red-700">
               この予定を削除
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
