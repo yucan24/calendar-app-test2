@@ -209,6 +209,18 @@ function addDateToSet(set: Set<string>, dateKey: string) {
   return next;
 }
 
+function toggleDateInSet(set: Set<string>, dateKey: string) {
+  const next = new Set(set);
+
+  if (next.has(dateKey)) {
+    next.delete(dateKey);
+  } else {
+    next.add(dateKey);
+  }
+
+  return next;
+}
+
 function visualLength(value: string | null | undefined) {
   const text = String(value ?? "").replace(/\s+/g, "");
   let count = 0;
@@ -315,6 +327,7 @@ export default function CoachWorkCalendarClient({
     new Set()
   );
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedSummaryCoachId, setSelectedSummaryCoachId] = useState<
     string | null
@@ -323,11 +336,11 @@ export default function CoachWorkCalendarClient({
   const [isPending, startTransition] = useTransition();
 
   const actionLockRef = useRef(false);
-  const longPressTimerRef = useRef<number | null>(null);
   const pointerDownDateRef = useRef<string | null>(null);
-  const didLongPressRef = useRef(false);
+  const isDraggingSelectionRef = useRef(false);
   const movedTooMuchRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDraggedDateRef = useRef<string | null>(null);
 
   const coachNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -430,19 +443,12 @@ export default function CoachWorkCalendarClient({
       });
   }, [logs, selectedSummaryCoachId]);
 
-  function clearLongPressTimer() {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }
-
   function resetPointerState() {
-    clearLongPressTimer();
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -454,11 +460,40 @@ export default function CoachWorkCalendarClient({
   function closeBulkModal() {
     setIsBulkModalOpen(false);
     setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
     setErrorMessage("");
   }
 
   function closeSummaryModal() {
     setSelectedSummaryCoachId(null);
+  }
+
+  function clearSelectedDates() {
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
+    setIsBulkModalOpen(false);
+    setErrorMessage("");
+  }
+
+  function handleMultiSelectModeChange() {
+    setErrorMessage("");
+
+    if (isMultiSelectMode) {
+      clearSelectedDates();
+      return;
+    }
+
+    setSelectedDateKey(null);
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(true);
+  }
+
+  function openBulkModal() {
+    if (selectedDateKeyList.length === 0) return;
+
+    setSelectedDateKey(null);
+    setErrorMessage("");
+    setIsBulkModalOpen(true);
   }
 
   function getDateKeyFromPoint(clientX: number, clientY: number) {
@@ -477,21 +512,19 @@ export default function CoachWorkCalendarClient({
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     setErrorMessage("");
-    clearLongPressTimer();
+
+    if (isMultiSelectMode) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
 
     pointerDownDateRef.current = dateKey;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
+    lastDraggedDateRef.current = null;
     startPointRef.current = {
       x: event.clientX,
       y: event.clientY,
     };
-
-    longPressTimerRef.current = window.setTimeout(() => {
-      didLongPressRef.current = true;
-      setIsSelectionActive(true);
-      setSelectedDateKeys(new Set([dateKey]));
-    }, 450);
   }
 
   function handleCalendarPointerMove(
@@ -503,41 +536,56 @@ export default function CoachWorkCalendarClient({
 
     const diffX = Math.abs(event.clientX - startPoint.x);
     const diffY = Math.abs(event.clientY - startPoint.y);
+    const dragThreshold = event.pointerType === "touch" ? 18 : 8;
 
-    if (!didLongPressRef.current && diffX + diffY > 12) {
-      movedTooMuchRef.current = true;
-      clearLongPressTimer();
+    if (!isDraggingSelectionRef.current && diffX + diffY <= dragThreshold) {
       return;
     }
 
-    if (!didLongPressRef.current) return;
+    if (!isMultiSelectMode) {
+      movedTooMuchRef.current = true;
+      return;
+    }
+
+    if (!isDraggingSelectionRef.current) {
+      isDraggingSelectionRef.current = true;
+      movedTooMuchRef.current = true;
+      setIsSelectionActive(true);
+      lastDraggedDateRef.current = pointerDownDateRef.current;
+      setSelectedDateKeys((current) =>
+        addDateToSet(current, pointerDownDateRef.current as string)
+      );
+    }
 
     event.preventDefault();
 
     const dateKey = getDateKeyFromPoint(event.clientX, event.clientY);
 
     if (!dateKey) return;
+    if (lastDraggedDateRef.current === dateKey) return;
 
+    lastDraggedDateRef.current = dateKey;
     setSelectedDateKeys((current) => addDateToSet(current, dateKey));
   }
 
   function handleCalendarPointerUp() {
     const dateKey = pointerDownDateRef.current;
-    const didLongPress = didLongPressRef.current;
+    const isDraggingSelection = isDraggingSelectionRef.current;
     const movedTooMuch = movedTooMuchRef.current;
 
-    clearLongPressTimer();
-
-    if (didLongPress) {
-      setIsBulkModalOpen(true);
+    if (isMultiSelectMode && dateKey && !movedTooMuch) {
+      setSelectedDateKeys((current) => toggleDateInSet(current, dateKey));
+    } else if (isMultiSelectMode && isDraggingSelection) {
+      setSelectedDateKey(null);
     } else if (dateKey && !movedTooMuch) {
       setSelectedDateKey(dateKey);
     }
 
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -820,7 +868,7 @@ export default function CoachWorkCalendarClient({
               指導者勤怠・立替管理
             </h1>
             <p className="mt-2 text-sm font-medium text-gray-700">
-              予定を確認しながら、日付タップで勤怠を入力できます。
+              予定を確認しながら、日付タップや複数選択で勤怠を入力できます。
             </p>
           </div>
 
@@ -867,6 +915,44 @@ export default function CoachWorkCalendarClient({
               </a>
             </div>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMultiSelectModeChange}
+              className={
+                isMultiSelectMode
+                  ? "rounded bg-black px-4 py-2 font-bold text-white"
+                  : "rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              }
+            >
+              複数選択
+            </button>
+
+            {selectedDateKeyList.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={openBulkModal}
+                  className="rounded bg-yellow-400 px-4 py-2 font-bold text-gray-950"
+                >
+                  まとめて勤怠入力
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearSelectedDates}
+                  className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+                >
+                  選択解除
+                </button>
+
+                <span className="text-sm font-bold text-gray-700">
+                  {selectedDateKeyList.length}日選択中
+                </span>
+              </>
+            )}
+          </div>
         </section>
 
         <section
@@ -874,7 +960,7 @@ export default function CoachWorkCalendarClient({
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}
-          style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
+          style={{ touchAction: isSelectionActive || isMultiSelectMode ? "none" : "pan-y" }}
         >
           <div className="grid grid-cols-7 gap-px bg-gray-300">
             {weekLabels.map((label, index) => (
@@ -945,6 +1031,7 @@ export default function CoachWorkCalendarClient({
                   key={cell.dateKey}
                   type="button"
                   data-date-key={cell.dateKey}
+                  aria-pressed={isSelected}
                   onPointerDown={(event) =>
                     handlePointerDown(event, cell.dateKey)
                   }

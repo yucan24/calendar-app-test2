@@ -3,7 +3,6 @@
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
-  ReactNode,
 } from "react";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -277,6 +276,18 @@ function addDateToSet(set: Set<string>, dateKey: string) {
   return next;
 }
 
+function toggleDateInSet(set: Set<string>, dateKey: string) {
+  const next = new Set(set);
+
+  if (next.has(dateKey)) {
+    next.delete(dateKey);
+  } else {
+    next.add(dateKey);
+  }
+
+  return next;
+}
+
 function buildEventInput(formData: FormData) {
   const dateKey = cleanText(formData.get("date_key"));
   const title = cleanText(formData.get("title"));
@@ -334,16 +345,17 @@ export default function AdminCalendarClient({
     new Set()
   );
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const actionLockRef = useRef(false);
-  const longPressTimerRef = useRef<number | null>(null);
   const pointerDownDateRef = useRef<string | null>(null);
-  const didLongPressRef = useRef(false);
+  const isDraggingSelectionRef = useRef(false);
   const movedTooMuchRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDraggedDateRef = useRef<string | null>(null);
 
   const profileList = useMemo(() => profiles ?? members ?? [], [profiles, members]);
 
@@ -441,24 +453,6 @@ export default function AdminCalendarClient({
     };
   }
 
-  function getParticipants(eventId: string, role: "admin" | "user") {
-    const eventResponses = responsesByEvent.get(eventId) ?? [];
-
-    return eventResponses
-      .filter((response) => response.status === "attend")
-      .map((response) => profileById.get(response.user_id))
-      .filter((profile): profile is Profile => Boolean(profile))
-      .filter((profile) => profile.role === role)
-      .map((profile) => profile.name);
-  }
-
-function responseMark(status: string | null | undefined) {
-  if (status === "attend") return "〇";
-  if (status === "absent") return "×";
-  if (status === "pending") return "△";
-  return "未";
-}
-
 function roleLabel(role: "admin" | "user") {
   if (role === "admin") return "指導者";
   return "選手";
@@ -482,19 +476,12 @@ function getResponseRows(eventId: string) {
   });
 }
   
-  function clearLongPressTimer() {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }
-
   function resetPointerState() {
-    clearLongPressTimer();
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -507,7 +494,38 @@ function getResponseRows(eventId: string) {
   function closeBulkModal() {
     setIsBulkModalOpen(false);
     setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
     setErrorMessage("");
+  }
+
+  function clearSelectedDates() {
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
+    setIsBulkModalOpen(false);
+    setErrorMessage("");
+  }
+
+  function handleMultiSelectModeChange() {
+    setErrorMessage("");
+
+    if (isMultiSelectMode) {
+      clearSelectedDates();
+      return;
+    }
+
+    setSelectedDateKey(null);
+    setSelectedEventId(null);
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(true);
+  }
+
+  function openBulkModal() {
+    if (selectedDateKeyList.length === 0) return;
+
+    setSelectedDateKey(null);
+    setSelectedEventId(null);
+    setErrorMessage("");
+    setIsBulkModalOpen(true);
   }
 
   function getDateKeyFromPoint(clientX: number, clientY: number) {
@@ -540,21 +558,19 @@ function getResponseRows(eventId: string) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     setErrorMessage("");
-    clearLongPressTimer();
+
+    if (isMultiSelectMode) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
 
     pointerDownDateRef.current = dateKey;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
+    lastDraggedDateRef.current = null;
     startPointRef.current = {
       x: event.clientX,
       y: event.clientY,
     };
-
-    longPressTimerRef.current = window.setTimeout(() => {
-      didLongPressRef.current = true;
-      setIsSelectionActive(true);
-      setSelectedDateKeys(new Set([dateKey]));
-    }, 450);
   }
 
   function handleCalendarPointerMove(
@@ -566,33 +582,48 @@ function getResponseRows(eventId: string) {
 
     const diffX = Math.abs(event.clientX - startPoint.x);
     const diffY = Math.abs(event.clientY - startPoint.y);
+    const dragThreshold = event.pointerType === "touch" ? 18 : 8;
 
-    if (!didLongPressRef.current && diffX + diffY > 12) {
-      movedTooMuchRef.current = true;
-      clearLongPressTimer();
+    if (!isDraggingSelectionRef.current && diffX + diffY <= dragThreshold) {
       return;
     }
 
-    if (!didLongPressRef.current) return;
+    if (!isMultiSelectMode) {
+      movedTooMuchRef.current = true;
+      return;
+    }
+
+    if (!isDraggingSelectionRef.current) {
+      isDraggingSelectionRef.current = true;
+      movedTooMuchRef.current = true;
+      setIsSelectionActive(true);
+      lastDraggedDateRef.current = pointerDownDateRef.current;
+      setSelectedDateKeys((current) =>
+        addDateToSet(current, pointerDownDateRef.current as string)
+      );
+    }
 
     event.preventDefault();
 
     const dateKey = getDateKeyFromPoint(event.clientX, event.clientY);
 
     if (!dateKey) return;
+    if (lastDraggedDateRef.current === dateKey) return;
 
+    lastDraggedDateRef.current = dateKey;
     setSelectedDateKeys((current) => addDateToSet(current, dateKey));
   }
 
   function handleCalendarPointerUp() {
     const dateKey = pointerDownDateRef.current;
-    const didLongPress = didLongPressRef.current;
+    const isDraggingSelection = isDraggingSelectionRef.current;
     const movedTooMuch = movedTooMuchRef.current;
 
-    clearLongPressTimer();
-
-    if (didLongPress) {
-      setIsBulkModalOpen(true);
+    if (isMultiSelectMode && dateKey && !movedTooMuch) {
+      setSelectedDateKeys((current) => toggleDateInSet(current, dateKey));
+    } else if (isMultiSelectMode && isDraggingSelection) {
+      setSelectedDateKey(null);
+      setSelectedEventId(null);
     } else if (dateKey && !movedTooMuch) {
       const dayEvents = eventsByDate.get(dateKey) ?? [];
       const firstNormalEvent =
@@ -603,9 +634,10 @@ function getResponseRows(eventId: string) {
     }
 
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -906,8 +938,6 @@ function renderEventBlock(event: CalendarEvent) {
   function renderSelectedEventDetail(event: CalendarEvent) {
     const summary = getEventSummary(event.id);
     const myResponse = myResponsesByEvent.get(event.id);
-    const coachNames = getParticipants(event.id, "admin");
-    const playerNames = getParticipants(event.id, "user");
 
     return (
       <section className="mt-5 rounded border border-gray-300 bg-white p-4">
@@ -1216,7 +1246,7 @@ function renderEventBlock(event: CalendarEvent) {
               カレンダー
             </h1>
             <p className="mt-2 text-sm font-medium text-gray-700">
-              日付タップで予定確認・追加、長押しドラッグで複数日にまとめて予定登録できます。
+              日付タップで予定確認・追加、複数選択でまとめて予定登録できます。
             </p>
           </div>
 
@@ -1263,6 +1293,44 @@ function renderEventBlock(event: CalendarEvent) {
               </a>
             </div>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMultiSelectModeChange}
+              className={
+                isMultiSelectMode
+                  ? "rounded bg-black px-4 py-2 font-bold text-white"
+                  : "rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              }
+            >
+              複数選択
+            </button>
+
+            {selectedDateKeyList.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={openBulkModal}
+                  className="rounded bg-yellow-400 px-4 py-2 font-bold text-gray-950"
+                >
+                  まとめて予定登録
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearSelectedDates}
+                  className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+                >
+                  選択解除
+                </button>
+
+                <span className="text-sm font-bold text-gray-700">
+                  {selectedDateKeyList.length}日選択中
+                </span>
+              </>
+            )}
+          </div>
         </section>
 
         <section
@@ -1270,7 +1338,7 @@ function renderEventBlock(event: CalendarEvent) {
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}
-          style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
+          style={{ touchAction: isSelectionActive || isMultiSelectMode ? "none" : "pan-y" }}
         >
           <div className="grid grid-cols-7 gap-px bg-gray-300">
             {weekLabels.map((label, index) => (
@@ -1317,6 +1385,7 @@ function renderEventBlock(event: CalendarEvent) {
                   key={cell.dateKey}
                   type="button"
                   data-date-key={cell.dateKey}
+                  aria-pressed={isSelected}
                   onPointerDown={(event) =>
                     handlePointerDown(event, cell.dateKey)
                   }

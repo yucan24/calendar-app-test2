@@ -274,6 +274,18 @@ function addDateToSet(set: Set<string>, dateKey: string) {
   return next;
 }
 
+function toggleDateInSet(set: Set<string>, dateKey: string) {
+  const next = new Set(set);
+
+  if (next.has(dateKey)) {
+    next.delete(dateKey);
+  } else {
+    next.add(dateKey);
+  }
+
+  return next;
+}
+
 export default function UserCalendarClient({
   currentUser: currentUserProp,
   currentProfile,
@@ -297,16 +309,17 @@ export default function UserCalendarClient({
     new Set()
   );
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const actionLockRef = useRef(false);
-  const longPressTimerRef = useRef<number | null>(null);
   const pointerDownDateRef = useRef<string | null>(null);
-  const didLongPressRef = useRef(false);
+  const isDraggingSelectionRef = useRef(false);
   const movedTooMuchRef = useRef(false);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDraggedDateRef = useRef<string | null>(null);
 
   const profileList = useMemo(
     () => profiles ?? members ?? [],
@@ -436,19 +449,12 @@ export default function UserCalendarClient({
       .map((profile) => profile.name);
   }
 
-  function clearLongPressTimer() {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }
-
   function resetPointerState() {
-    clearLongPressTimer();
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -461,7 +467,38 @@ export default function UserCalendarClient({
   function closeBulkModal() {
     setIsBulkModalOpen(false);
     setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
     setErrorMessage("");
+  }
+
+  function clearSelectedDates() {
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(false);
+    setIsBulkModalOpen(false);
+    setErrorMessage("");
+  }
+
+  function handleMultiSelectModeChange() {
+    setErrorMessage("");
+
+    if (isMultiSelectMode) {
+      clearSelectedDates();
+      return;
+    }
+
+    setSelectedDateKey(null);
+    setSelectedEventId(null);
+    setSelectedDateKeys(new Set());
+    setIsMultiSelectMode(true);
+  }
+
+  function openBulkModal() {
+    if (selectedDateKeyList.length === 0) return;
+
+    setSelectedDateKey(null);
+    setSelectedEventId(null);
+    setErrorMessage("");
+    setIsBulkModalOpen(true);
   }
 
   function getDateKeyFromPoint(clientX: number, clientY: number) {
@@ -494,21 +531,19 @@ export default function UserCalendarClient({
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     setErrorMessage("");
-    clearLongPressTimer();
+
+    if (isMultiSelectMode) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
 
     pointerDownDateRef.current = dateKey;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
+    lastDraggedDateRef.current = null;
     startPointRef.current = {
       x: event.clientX,
       y: event.clientY,
     };
-
-    longPressTimerRef.current = window.setTimeout(() => {
-      didLongPressRef.current = true;
-      setIsSelectionActive(true);
-      setSelectedDateKeys(new Set([dateKey]));
-    }, 450);
   }
 
   function handleCalendarPointerMove(
@@ -520,33 +555,48 @@ export default function UserCalendarClient({
 
     const diffX = Math.abs(event.clientX - startPoint.x);
     const diffY = Math.abs(event.clientY - startPoint.y);
+    const dragThreshold = event.pointerType === "touch" ? 18 : 8;
 
-    if (!didLongPressRef.current && diffX + diffY > 12) {
-      movedTooMuchRef.current = true;
-      clearLongPressTimer();
+    if (!isDraggingSelectionRef.current && diffX + diffY <= dragThreshold) {
       return;
     }
 
-    if (!didLongPressRef.current) return;
+    if (!isMultiSelectMode) {
+      movedTooMuchRef.current = true;
+      return;
+    }
+
+    if (!isDraggingSelectionRef.current) {
+      isDraggingSelectionRef.current = true;
+      movedTooMuchRef.current = true;
+      setIsSelectionActive(true);
+      lastDraggedDateRef.current = pointerDownDateRef.current;
+      setSelectedDateKeys((current) =>
+        addDateToSet(current, pointerDownDateRef.current as string)
+      );
+    }
 
     event.preventDefault();
 
     const dateKey = getDateKeyFromPoint(event.clientX, event.clientY);
 
     if (!dateKey) return;
+    if (lastDraggedDateRef.current === dateKey) return;
 
+    lastDraggedDateRef.current = dateKey;
     setSelectedDateKeys((current) => addDateToSet(current, dateKey));
   }
 
   function handleCalendarPointerUp() {
     const dateKey = pointerDownDateRef.current;
-    const didLongPress = didLongPressRef.current;
+    const isDraggingSelection = isDraggingSelectionRef.current;
     const movedTooMuch = movedTooMuchRef.current;
 
-    clearLongPressTimer();
-
-    if (didLongPress) {
-      setIsBulkModalOpen(true);
+    if (isMultiSelectMode && dateKey && !movedTooMuch) {
+      setSelectedDateKeys((current) => toggleDateInSet(current, dateKey));
+    } else if (isMultiSelectMode && isDraggingSelection) {
+      setSelectedDateKey(null);
+      setSelectedEventId(null);
     } else if (dateKey && !movedTooMuch) {
       const dayEvents = eventsByDate.get(dateKey) ?? [];
       const firstNormalEvent =
@@ -557,9 +607,10 @@ export default function UserCalendarClient({
     }
 
     pointerDownDateRef.current = null;
-    didLongPressRef.current = false;
+    isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
     startPointRef.current = null;
+    lastDraggedDateRef.current = null;
     setIsSelectionActive(false);
   }
 
@@ -934,7 +985,7 @@ function renderEventBlock(event: CalendarEvent) {
               カレンダー
             </h1>
             <p className="mt-2 text-sm font-medium text-gray-700">
-              日付タップで予定確認・出欠回答、長押しドラッグで複数日にまとめて出欠回答できます。
+              日付タップで予定確認・出欠回答、複数選択でまとめて出欠回答できます。
             </p>
           </div>
 
@@ -981,6 +1032,44 @@ function renderEventBlock(event: CalendarEvent) {
               </a>
             </div>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMultiSelectModeChange}
+              className={
+                isMultiSelectMode
+                  ? "rounded bg-black px-4 py-2 font-bold text-white"
+                  : "rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+              }
+            >
+              複数選択
+            </button>
+
+            {selectedDateKeyList.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={openBulkModal}
+                  className="rounded bg-yellow-400 px-4 py-2 font-bold text-gray-950"
+                >
+                  まとめて出欠回答
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearSelectedDates}
+                  className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+                >
+                  選択解除
+                </button>
+
+                <span className="text-sm font-bold text-gray-700">
+                  {selectedDateKeyList.length}日選択中
+                </span>
+              </>
+            )}
+          </div>
         </section>
 
         <section
@@ -988,7 +1077,7 @@ function renderEventBlock(event: CalendarEvent) {
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}
-          style={{ touchAction: isSelectionActive ? "none" : "pan-y" }}
+          style={{ touchAction: isSelectionActive || isMultiSelectMode ? "none" : "pan-y" }}
         >
           <div className="grid grid-cols-7 gap-px bg-gray-300">
             {weekLabels.map((label, index) => (
@@ -1035,6 +1124,7 @@ function renderEventBlock(event: CalendarEvent) {
                   key={cell.dateKey}
                   type="button"
                   data-date-key={cell.dateKey}
+                  aria-pressed={isSelected}
                   onPointerDown={(event) =>
                     handlePointerDown(event, cell.dateKey)
                   }
