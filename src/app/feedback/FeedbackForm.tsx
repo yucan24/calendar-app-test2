@@ -1,45 +1,61 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
-import SubmitButton from "@/components/SubmitButton";
-import { submitDeveloperFeedback, type FeedbackState } from "./actions";
+import type { FormEvent } from "react";
 
-const initialState: FeedbackState = {
-  ok: false,
-  message: "",
-  submittedAt: null,
-};
+const FEEDBACK_EMAIL = "bbstatus@gmail.com";
 
 const fieldClass =
   "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
 
+const categoryLabels: Record<string, string> = {
+  usability: "操作性",
+  bug: "不具合",
+  request: "要望",
+  other: "その他",
+};
+
+const urgencyLabels: Record<string, string> = {
+  normal: "通常",
+  urgent: "急ぎ",
+};
+
+function textValue(formData: FormData, name: string) {
+  return String(formData.get(name) ?? "").trim();
+}
+
+function buildMailto(formData: FormData) {
+  const category = textValue(formData, "category");
+  const urgency = textValue(formData, "urgency");
+  const pagePath = textValue(formData, "page_path");
+  const message = textValue(formData, "message");
+  const categoryLabel = categoryLabels[category] ?? "その他";
+  const urgencyLabel = urgencyLabels[urgency] ?? "通常";
+
+  const subject = `【calendar-app-test2】${categoryLabel}のご意見`;
+  const body = [
+    `種類：${categoryLabel}`,
+    `優先度：${urgencyLabel}`,
+    `該当ページ：${pagePath || "未入力"}`,
+    "",
+    "内容：",
+    message,
+  ].join("\n");
+
+  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
+}
+
 export default function FeedbackForm() {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [state, formAction] = useActionState(
-    submitDeveloperFeedback,
-    initialState
-  );
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  useEffect(() => {
-    if (!state.ok || !state.submittedAt) return;
-
-    formRef.current?.reset();
-  }, [state.ok, state.submittedAt]);
+    const formData = new FormData(event.currentTarget);
+    window.location.href = buildMailto(formData);
+  }
 
   return (
-    <form ref={formRef} action={formAction} className="mt-6 space-y-5">
-      {state.message && (
-        <div
-          className={
-            state.ok
-              ? "rounded bg-green-100 p-3 font-bold text-green-800"
-              : "rounded bg-red-100 p-3 font-bold text-red-700"
-          }
-        >
-          {state.message}
-        </div>
-      )}
-
+    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
       <div>
         <label className="block text-sm font-bold text-gray-900">種類</label>
         <select name="category" defaultValue="usability" className={fieldClass}>
@@ -99,12 +115,12 @@ export default function FeedbackForm() {
         />
       </div>
 
-      <SubmitButton
-        pendingText="送信中..."
+      <button
+        type="submit"
         className="w-full rounded bg-black px-4 py-3 font-bold text-white"
       >
         送信
-      </SubmitButton>
+      </button>
     </form>
   );
 }

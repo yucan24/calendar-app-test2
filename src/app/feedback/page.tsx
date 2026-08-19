@@ -1,11 +1,7 @@
 import Link from "next/link";
-import { requireLogin } from "@/lib/auth";
 import FeedbackForm from "./FeedbackForm";
 
-export default async function FeedbackPage() {
-  const profile = await requireLogin();
-  const backHref = profile.role === "admin" ? "/admin" : "/user";
-
+export default function FeedbackPage() {
   return (
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
       <div className="mx-auto max-w-2xl">
@@ -15,15 +11,15 @@ export default async function FeedbackPage() {
               開発者へのご意見
             </h1>
             <p className="mt-3 text-base font-medium text-gray-700">
-              {profile.name} さんでログイン中
+              送信先：bbstatus@gmail.com
             </p>
           </div>
 
           <Link
-            href={backHref}
+            href="/login"
             className="rounded border border-gray-400 bg-white px-4 py-2 text-center font-bold text-gray-900"
           >
-            戻る
+            ログイン画面へ
           </Link>
         </div>
 
