@@ -68,17 +68,6 @@ export default async function AdminPage() {
             </p>
           </Link>
 
-          <Link
-            href="/feedback"
-            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
-          >
-            <h2 className="text-2xl font-bold text-gray-900">
-              開発者へのご意見
-            </h2>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              不具合、操作性、追加要望を送信します。
-            </p>
-          </Link>
         </div>
       </div>
     </main>
