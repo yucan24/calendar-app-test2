@@ -37,7 +37,14 @@ create trigger set_developer_feedback_updated_at
 before update on public.developer_feedback
 for each row execute function public.set_updated_at();
 
-alter table public.developer_feedback disable row level security;
+alter table public.developer_feedback enable row level security;
+
+drop policy if exists developer_feedback_insert on public.developer_feedback;
+create policy developer_feedback_insert
+on public.developer_feedback
+for insert
+to anon, authenticated
+with check (status = 'open');
 
 grant usage on schema public to anon, authenticated;
 grant insert on table public.developer_feedback to anon, authenticated;
