@@ -5,7 +5,6 @@ import MemberProfileForm from "./MemberProfileForm";
 
 import {
   updateMemberLoginEnabled,
-  updateMemberProfile,
   updateMemberRole,
 } from "./actions";
 
@@ -18,9 +17,6 @@ type Profile = {
   login_enabled: boolean;
   created_at: string;
 };
-
-const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
 
 function roleLabel(role: string) {
   return role === "admin" ? "管理者" : "一般ユーザー";

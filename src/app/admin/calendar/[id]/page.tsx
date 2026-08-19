@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -180,12 +181,12 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
             予定が見つかりません。
           </p>
 
-          <a
+          <Link
             href="/admin/calendar"
             className="mt-6 inline-block rounded border bg-white px-4 py-2"
           >
             カレンダーに戻る
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -217,12 +218,12 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
             出欠取得エラー：{responsesError.message}
           </p>
 
-          <a
+          <Link
             href="/admin/calendar"
             className="mt-6 inline-block rounded border bg-white px-4 py-2"
           >
             カレンダーに戻る
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -265,12 +266,12 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
             </p>
           </div>
 
-          <a
+          <Link
             href={`/admin/calendar?year=${eventYear}&month=${eventMonth}&date=${eventDate}`}
             className="rounded border bg-white px-4 py-2 text-center"
           >
             カレンダーに戻る
-          </a>
+          </Link>
         </div>
 
         <section className="mt-6 rounded-lg bg-white p-6 shadow">

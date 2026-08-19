@@ -9,29 +9,26 @@ type BillingStatus = "paid" | "unpaid" | "exempt";
 type BillingStatusButtonsProps = {
   itemId: string;
   currentStatus: string;
+  itemType?: "charge" | "refund";
 };
 
 const statusOptions: Array<{
   status: BillingStatus;
-  label: string;
   activeClass: string;
   inactiveClass: string;
 }> = [
   {
     status: "paid",
-    label: "済",
     activeClass: "bg-green-600 text-white ring-green-700",
     inactiveClass: "border border-green-200 bg-green-50 text-green-800",
   },
   {
     status: "unpaid",
-    label: "未",
     activeClass: "bg-red-600 text-white ring-red-700",
     inactiveClass: "border border-red-200 bg-red-50 text-red-800",
   },
   {
     status: "exempt",
-    label: "免除",
     activeClass: "bg-gray-700 text-white ring-gray-800",
     inactiveClass: "border border-gray-300 bg-gray-100 text-gray-800",
   },
@@ -47,9 +44,22 @@ function getErrorMessage(error: unknown) {
   return "更新に失敗しました";
 }
 
+function optionLabel(status: BillingStatus, itemType: "charge" | "refund") {
+  if (itemType === "refund") {
+    if (status === "paid") return "清算済";
+    if (status === "unpaid") return "未清算";
+    return "不要";
+  }
+
+  if (status === "paid") return "済";
+  if (status === "unpaid") return "未";
+  return "免除";
+}
+
 export default function BillingStatusButtons({
   itemId,
   currentStatus,
+  itemType = "charge",
 }: BillingStatusButtonsProps) {
   const router = useRouter();
   const [localStatus, setLocalStatus] = useState<BillingStatus>(
@@ -107,7 +117,7 @@ export default function BillingStatusButtons({
                     : `${option.inactiveClass} hover:brightness-95`,
               ].join(" ")}
             >
-              {option.label}
+              {optionLabel(option.status, itemType)}
             </button>
           );
         })}

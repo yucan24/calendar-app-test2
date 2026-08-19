@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 
 export default async function AdminPage() {
@@ -14,16 +15,16 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <a
+          <Link
             href="/logout"
             className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
           >
             ログアウト
-          </a>
+          </Link>
         </div>
 
         <div className="mt-8 grid gap-5">
-          <a
+          <Link
             href="/admin/calendar"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -31,9 +32,9 @@ export default async function AdminPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               予定作成、出欠確認、集計を行います。
             </p>
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/admin/coach-work"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -43,9 +44,9 @@ export default async function AdminPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               指導時間、事務作業時間、交通費、立替費用を記録・集計します。
             </p>
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/admin/users"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -55,9 +56,9 @@ export default async function AdminPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               月謝、遠征費、その他費用の確認と支払い管理を行います。
             </p>
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/admin/members"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -65,7 +66,19 @@ export default async function AdminPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               会員登録の承認、登録情報編集、管理者権限、ログイン許可を管理します。
             </p>
-          </a>
+          </Link>
+
+          <Link
+            href="/feedback"
+            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
+          >
+            <h2 className="text-2xl font-bold text-gray-900">
+              開発者へのご意見
+            </h2>
+            <p className="mt-3 text-base font-medium text-gray-700">
+              不具合、操作性、追加要望を送信します。
+            </p>
+          </Link>
         </div>
       </div>
     </main>

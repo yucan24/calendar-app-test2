@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
@@ -13,8 +13,16 @@ type BillingItem = {
   category: string;
   title: string;
   amount: number;
+  status: string;
   note: string | null;
+  paid_at?: string | null;
 };
+
+const REFUND_TITLE = "返金";
+
+function isRefundItem(item: BillingItem) {
+  return item.title === REFUND_TITLE;
+}
 
 function categoryLabel(category: string) {
   if (category === "tuition") return "月謝";
@@ -24,13 +32,52 @@ function categoryLabel(category: string) {
   return "その他";
 }
 
+function itemLabel(item: BillingItem) {
+  if (isRefundItem(item)) return REFUND_TITLE;
+  return categoryLabel(item.category);
+}
+
+function getRecentTargetMonths(currentMonth: string, count: number) {
+  const [year, month] = currentMonth.split("-").map(Number);
+
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(year, month - 1 - index, 1);
+    const targetYear = date.getFullYear();
+    const targetMonth = String(date.getMonth() + 1).padStart(2, "0");
+
+    return `${targetYear}-${targetMonth}`;
+  });
+}
+
+function historyStatusLabel(item: BillingItem) {
+  if (isRefundItem(item)) {
+    if (item.status === "paid") return "清算済み";
+    if (item.status === "exempt") return "清算不要";
+  }
+
+  if (item.status === "paid") return "支払い済み";
+  if (item.status === "exempt") return "免除";
+  return "未確認";
+}
+
+function historyStatusClass(item: BillingItem) {
+  if (isRefundItem(item)) {
+    if (item.status === "paid") return "bg-blue-100 text-blue-800";
+    return "bg-gray-200 text-gray-800";
+  }
+
+  if (item.status === "paid") return "bg-green-100 text-green-800";
+  return "bg-gray-200 text-gray-800";
+}
+
 export default async function UserPaymentCheckPage() {
   const user = await requireUser();
   const currentMonth = getCurrentTargetMonth();
+  const recentTargetMonths = getRecentTargetMonths(currentMonth, 3);
 
   const { data: unpaidItems, error } = await supabase
     .from("billing_items")
-    .select("id, target_month, category, title, amount, note")
+    .select("id, target_month, category, title, amount, status, note")
     .eq("group_id", user.group_id)
     .eq("user_id", user.id)
     .eq("status", "unpaid")
@@ -42,15 +89,29 @@ export default async function UserPaymentCheckPage() {
     throw new Error(error.message);
   }
 
-  const items = (unpaidItems ?? []) as BillingItem[];
+  const { data: historyItems, error: historyError } = await supabase
+    .from("billing_items")
+    .select("id, target_month, category, title, amount, status, note, paid_at")
+    .eq("group_id", user.group_id)
+    .eq("user_id", user.id)
+    .in("status", ["paid", "exempt"])
+    .in("target_month", recentTargetMonths)
+    .order("target_month", { ascending: false })
+    .order("paid_at", { ascending: false });
 
-  if (items.length === 0) {
-    redirect("/user/calendar");
+  if (historyError) {
+    throw new Error(historyError.message);
   }
 
-  const unpaidTotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const items = (unpaidItems ?? []) as BillingItem[];
+  const histories = (historyItems ?? []) as BillingItem[];
+  const paymentItems = items.filter((item) => !isRefundItem(item));
+  const refundItems = items.filter((item) => isRefundItem(item));
 
-  const currentTuitionUnpaid = items.some(
+  const unpaidTotal = paymentItems.reduce((sum, item) => sum + item.amount, 0);
+  const refundTotal = refundItems.reduce((sum, item) => sum + item.amount, 0);
+
+  const currentTuitionUnpaid = paymentItems.some(
     (item) => item.target_month === currentMonth && item.category === "tuition"
   );
 
@@ -59,8 +120,16 @@ export default async function UserPaymentCheckPage() {
       <div className="mx-auto max-w-md">
         <section className="rounded-lg bg-white p-6 shadow">
           <h1 className="text-2xl font-bold text-gray-900">
-            未払い項目があります
+            {items.length > 0
+              ? "確認が必要な項目があります"
+              : "未払い・未清算項目はありません"}
           </h1>
+
+          {items.length === 0 && (
+            <p className="mt-4 rounded bg-green-50 p-4 font-bold text-green-800">
+              現在確認が必要な支払い・返金項目はありません。
+            </p>
+          )}
 
           {currentTuitionUnpaid && (
             <p className="mt-4 rounded bg-red-100 p-3 font-bold text-red-700">
@@ -68,30 +137,156 @@ export default async function UserPaymentCheckPage() {
             </p>
           )}
 
-          <div className="mt-5 rounded bg-red-50 p-4">
-            <p className="text-sm font-bold text-red-700">未払い合計</p>
-            <p className="mt-1 text-4xl font-bold text-red-700">
-              {formatYen(unpaidTotal)}
-            </p>
+          <div className="mt-5 grid gap-3">
+            {paymentItems.length > 0 && (
+              <div className="rounded bg-red-50 p-4">
+                <p className="text-sm font-bold text-red-700">未払い合計</p>
+                <p className="mt-1 text-4xl font-bold text-red-700">
+                  {formatYen(unpaidTotal)}
+                </p>
+              </div>
+            )}
+
+            {refundItems.length > 0 && (
+              <div className="rounded bg-blue-50 p-4">
+                <p className="text-sm font-bold text-blue-700">
+                  未清算返金合計
+                </p>
+                <p className="mt-1 text-4xl font-bold text-blue-700">
+                  {formatYen(refundTotal)}
+                </p>
+                <p className="mt-2 text-sm font-bold text-blue-800">
+                  皆様へ振込予定の金額です。
+                </p>
+              </div>
+            )}
           </div>
 
-          <div className="mt-6">
-            <h2 className="font-bold text-gray-900">未払い内訳</h2>
+          {paymentItems.length > 0 && (
+            <div className="mt-6">
+              <h2 className="font-bold text-gray-900">未払い内訳</h2>
 
+              <div className="mt-3 space-y-3">
+                {paymentItems.map((item) => (
+                  <div key={item.id} className="rounded border bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-gray-900">
+                          {itemLabel(item)}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-gray-700">
+                          {formatTargetMonth(item.target_month)}
+                        </p>
+                      </div>
+
+                      <p className="font-bold text-red-700">
+                        {formatYen(item.amount)}
+                      </p>
+                    </div>
+
+                    {item.note && (
+                      <p className="mt-3 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
+                        備考：{item.note}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {refundItems.length > 0 && (
+            <div className="mt-6">
+              <h2 className="font-bold text-gray-900">未清算返金内訳</h2>
+
+              <div className="mt-3 space-y-3">
+                {refundItems.map((item) => (
+                  <div key={item.id} className="rounded border bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-gray-900">
+                          {itemLabel(item)}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-gray-700">
+                          {formatTargetMonth(item.target_month)}
+                        </p>
+                      </div>
+
+                      <p className="font-bold text-blue-700">
+                        {formatYen(item.amount)}
+                      </p>
+                    </div>
+
+                    {item.note && (
+                      <p className="mt-3 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
+                        備考：{item.note}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Link
+            href="/user/calendar"
+            className="mt-6 block rounded bg-black px-4 py-3 text-center font-bold text-white"
+          >
+            確認してカレンダーへ進む
+          </Link>
+
+          <p className="mt-4 text-sm font-medium text-gray-700">
+            支払い済みの場合は、管理者側の確認後に表示が更新されます。
+          </p>
+        </section>
+
+        <section className="mt-5 rounded-lg bg-white p-6 shadow">
+          <h2 className="text-lg font-bold text-gray-900">
+            直近3ヶ月の支払い・返金履歴
+          </h2>
+
+          {histories.length === 0 ? (
+            <p className="mt-3 rounded bg-gray-50 p-3 text-sm font-medium text-gray-700">
+              直近3ヶ月の履歴はありません。
+            </p>
+          ) : (
             <div className="mt-3 space-y-3">
-              {items.map((item) => (
+              {histories.map((item) => (
                 <div key={item.id} className="rounded border bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold text-gray-900">
-                        {categoryLabel(item.category)}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-gray-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded px-2 py-1 text-xs font-bold ${historyStatusClass(
+                            item
+                          )}`}
+                        >
+                          {historyStatusLabel(item)}
+                        </span>
+
+                        <span
+                          className={
+                            isRefundItem(item)
+                              ? "rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800"
+                              : "rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800"
+                          }
+                        >
+                          {itemLabel(item)}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm font-medium text-gray-700">
                         {formatTargetMonth(item.target_month)}
                       </p>
                     </div>
 
-                    <p className="font-bold text-red-700">
+                    <p
+                      className={
+                        isRefundItem(item)
+                          ? "font-bold text-blue-700"
+                          : "font-bold text-gray-900"
+                      }
+                    >
                       {formatYen(item.amount)}
                     </p>
                   </div>
@@ -104,18 +299,7 @@ export default async function UserPaymentCheckPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          <a
-            href="/user/calendar"
-            className="mt-6 block rounded bg-black px-4 py-3 text-center font-bold text-white"
-          >
-            確認してカレンダーへ進む
-          </a>
-
-          <p className="mt-4 text-sm font-medium text-gray-700">
-            支払い済みの場合は、管理者側の確認後に表示が更新されます。
-          </p>
+          )}
         </section>
       </div>
     </main>

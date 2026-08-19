@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 
 export default async function UserPage() {
@@ -14,16 +15,16 @@ export default async function UserPage() {
             </p>
           </div>
 
-          <a
+          <Link
             href="/logout"
             className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
           >
             ログアウト
-          </a>
+          </Link>
         </div>
 
         <div className="mt-8 grid gap-5">
-          <a
+          <Link
             href="/user/payment-check"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -33,9 +34,9 @@ export default async function UserPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               月謝、遠征費、その他費用の未払い金額と内訳を確認します。
             </p>
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/user/calendar"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
           >
@@ -43,7 +44,19 @@ export default async function UserPage() {
             <p className="mt-3 text-base font-medium text-gray-700">
               予定確認と出欠回答を行います。
             </p>
-          </a>
+          </Link>
+
+          <Link
+            href="/feedback"
+            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
+          >
+            <h2 className="text-2xl font-bold text-gray-900">
+              開発者へのご意見
+            </h2>
+            <p className="mt-3 text-base font-medium text-gray-700">
+              不具合、操作性、追加要望を送信します。
+            </p>
+          </Link>
         </div>
       </div>
     </main>

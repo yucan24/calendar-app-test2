@@ -4,8 +4,16 @@ import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
 
-const VALID_CATEGORIES = ["tuition", "trip", "event", "uniform", "other"];
+const VALID_CATEGORIES = [
+  "tuition",
+  "trip",
+  "event",
+  "uniform",
+  "other",
+  "refund",
+];
 const VALID_STATUSES = ["unpaid", "paid", "exempt"];
+const REFUND_TITLE = "返金";
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -30,7 +38,22 @@ function categoryLabel(category: string) {
   if (category === "trip") return "遠征費";
   if (category === "event") return "大会・イベント費";
   if (category === "uniform") return "ユニフォーム代";
+  if (category === "refund") return REFUND_TITLE;
   return "その他";
+}
+
+function buildBillingItemCategory(inputCategory: string) {
+  if (inputCategory === "refund") {
+    return {
+      category: "other",
+      title: REFUND_TITLE,
+    };
+  }
+
+  return {
+    category: inputCategory,
+    title: categoryLabel(inputCategory),
+  };
 }
 
 async function assertUserInAdminGroup(userId: string, groupId: string) {
@@ -87,13 +110,14 @@ export async function createBillingItem(formData: FormData) {
   }
 
   await assertUserInAdminGroup(userId, admin.group_id);
+  const billingItemCategory = buildBillingItemCategory(category);
 
   const { error } = await supabase.from("billing_items").insert({
     group_id: admin.group_id,
     user_id: userId,
     target_month: targetMonth,
-    category,
-    title: categoryLabel(category),
+    category: billingItemCategory.category,
+    title: billingItemCategory.title,
     amount,
     status: "unpaid",
     due_date: null,
@@ -204,13 +228,14 @@ export async function updateBillingItem(formData: FormData) {
   }
 
   await assertBillingItemInAdminGroup(itemId, admin.group_id);
+  const billingItemCategory = buildBillingItemCategory(category);
 
   const { error } = await supabase
     .from("billing_items")
     .update({
       target_month: targetMonth,
-      category,
-      title: categoryLabel(category),
+      category: billingItemCategory.category,
+      title: billingItemCategory.title,
       amount,
       note,
       updated_at: new Date().toISOString(),

@@ -43,23 +43,42 @@ type BillingItem = {
 const fieldClass =
   "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
 
+const REFUND_TITLE = "返金";
+
+function isRefundItem(item: BillingItem) {
+  return item.title === REFUND_TITLE;
+}
+
 function categoryLabel(category: string) {
   if (category === "tuition") return "月謝";
   if (category === "trip") return "遠征費";
   if (category === "event") return "大会・イベント費";
   if (category === "uniform") return "ユニフォーム代";
+  if (category === "refund") return REFUND_TITLE;
   return "その他";
 }
 
-function statusLabel(status: string) {
+function itemLabel(item: BillingItem) {
+  if (isRefundItem(item)) return REFUND_TITLE;
+  return categoryLabel(item.category);
+}
+
+function statusLabel(status: string, itemType: "charge" | "refund") {
+  if (itemType === "refund") {
+    if (status === "paid") return "清算済み";
+    if (status === "exempt") return "清算不要";
+    return "未清算";
+  }
+
   if (status === "paid") return "支払い済み";
   if (status === "exempt") return "免除";
   return "未払い";
 }
 
-function statusClass(status: string) {
+function statusClass(status: string, itemType: "charge" | "refund") {
   if (status === "paid") return "bg-green-100 text-green-800";
   if (status === "exempt") return "bg-gray-200 text-gray-800";
+  if (itemType === "refund") return "bg-blue-100 text-blue-800";
   return "bg-red-100 text-red-800";
 }
 
@@ -142,7 +161,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   const unpaidUsers = userList.filter((user) => {
     const items = itemsByUser.get(user.id) ?? [];
-    return items.some((item) => item.status === "unpaid" && item.amount > 0);
+    return items.some(
+      (item) =>
+        item.status === "unpaid" && item.amount > 0 && !isRefundItem(item)
+    );
   });
 
   const reminderHref = buildReminderMailto(unpaidUsers);
@@ -271,8 +293,17 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         <section className="mt-6 space-y-4">
           {userList.map((user) => {
             const items = itemsByUser.get(user.id) ?? [];
-            const unpaidItems = items.filter((item) => item.status === "unpaid");
+            const unpaidItems = items.filter(
+              (item) => item.status === "unpaid" && !isRefundItem(item)
+            );
+            const unsettledRefundItems = items.filter(
+              (item) => item.status === "unpaid" && isRefundItem(item)
+            );
             const unpaidTotal = unpaidItems.reduce(
+              (sum, item) => sum + item.amount,
+              0
+            );
+            const unsettledRefundTotal = unsettledRefundItems.reduce(
               (sum, item) => sum + item.amount,
               0
             );
@@ -325,13 +356,24 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                     </div>
                   </div>
 
-                  <div className="rounded bg-red-50 px-4 py-3 text-right">
-                    <p className="text-sm font-bold text-red-700">
-                      未払い合計
-                    </p>
-                    <p className="text-2xl font-bold text-red-700">
-                      {formatYen(unpaidTotal)}
-                    </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded bg-red-50 px-4 py-3 text-right">
+                      <p className="text-sm font-bold text-red-700">
+                        未払い合計
+                      </p>
+                      <p className="text-2xl font-bold text-red-700">
+                        {formatYen(unpaidTotal)}
+                      </p>
+                    </div>
+
+                    <div className="rounded bg-blue-50 px-4 py-3 text-right">
+                      <p className="text-sm font-bold text-blue-700">
+                        未清算返金
+                      </p>
+                      <p className="text-2xl font-bold text-blue-700">
+                        {formatYen(unsettledRefundTotal)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -375,6 +417,9 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                           <option value="event">大会・イベント費</option>
                           <option value="uniform">ユニフォーム代</option>
                           <option value="other">その他</option>
+                          <option value="refund">
+                            返金（管理者から保護者へ）
+                          </option>
                         </select>
                       </div>
 
@@ -389,10 +434,13 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                           required
                           className={fieldClass}
                         />
+                        <p className="mt-1 text-xs font-medium text-gray-600">
+                          返金も正の金額で入力します。
+                        </p>
                       </div>
 
                       <div className="flex min-w-0 items-end">
-                        <SubmitButton 
+                        <SubmitButton
                           pendingText="追加中・・・"
                           className="w-full rounded bg-black px-4 py-3 font-bold text-white"
                         >
@@ -424,129 +472,159 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       </p>
                     ) : (
                       <div className="mt-3 space-y-3">
-                        {targetMonthItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded border border-gray-300 bg-white p-4"
-                          >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span
-                                    className={`rounded px-2 py-1 text-xs font-bold ${statusClass(
-                                      item.status
-                                    )}`}
-                                  >
-                                    {statusLabel(item.status)}
-                                  </span>
+                        {targetMonthItems.map((item) => {
+                          const itemType = isRefundItem(item)
+                            ? "refund"
+                            : "charge";
 
-                                  <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800">
-                                    {categoryLabel(item.category)}
-                                  </span>
+                          return (
+                            <div
+                              key={item.id}
+                              className="rounded border border-gray-300 bg-white p-4"
+                            >
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`rounded px-2 py-1 text-xs font-bold ${statusClass(
+                                        item.status,
+                                        itemType
+                                      )}`}
+                                    >
+                                      {statusLabel(item.status, itemType)}
+                                    </span>
+
+                                    <span
+                                      className={
+                                        itemType === "refund"
+                                          ? "rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800"
+                                          : "rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800"
+                                      }
+                                    >
+                                      {itemLabel(item)}
+                                    </span>
+                                  </div>
+
+                                  <p className="mt-2 text-lg font-bold text-gray-900">
+                                    {itemLabel(item)}
+                                  </p>
+
+                                  <p
+                                    className={
+                                      itemType === "refund"
+                                        ? "mt-1 text-sm font-bold text-blue-700"
+                                        : "mt-1 text-sm font-medium text-gray-700"
+                                    }
+                                  >
+                                    金額：{formatYen(item.amount)}
+                                  </p>
+
+                                  {item.note && (
+                                    <p className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
+                                      備考：{item.note}
+                                    </p>
+                                  )}
                                 </div>
 
-                                <p className="mt-2 text-lg font-bold text-gray-900">
-                                  {categoryLabel(item.category)}
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium text-gray-700">
-                                  金額：{formatYen(item.amount)}
-                                </p>
-
-                                {item.note && (
-                                  <p className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
-                                    備考：{item.note}
-                                  </p>
-                                )}
+                                <BillingStatusButtons
+                                  itemId={item.id}
+                                  currentStatus={item.status}
+                                  itemType={itemType}
+                                />
                               </div>
 
-                              <BillingStatusButtons
-                                itemId={item.id}
-                                currentStatus={item.status}
-                              />
+                              <details className="mt-4 rounded bg-gray-50 p-3">
+                                <summary className="cursor-pointer font-bold text-gray-900">
+                                  請求内容を修正
+                                </summary>
+
+                                <form
+                                  action={updateBillingItem}
+                                  className="mt-3 grid min-w-0 gap-3 sm:grid-cols-4"
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="item_id"
+                                    value={item.id}
+                                  />
+
+                                  <div className="min-w-0">
+                                    <label className="block text-sm font-bold text-gray-900">
+                                      対象月
+                                    </label>
+                                    <input
+                                      name="target_month"
+                                      type="month"
+                                      defaultValue={item.target_month}
+                                      className={fieldClass}
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <label className="block text-sm font-bold text-gray-900">
+                                      費目
+                                    </label>
+                                    <select
+                                      name="category"
+                                      defaultValue={
+                                        itemType === "refund"
+                                          ? "refund"
+                                          : item.category
+                                      }
+                                      className={fieldClass}
+                                    >
+                                      <option value="tuition">月謝</option>
+                                      <option value="trip">遠征費</option>
+                                      <option value="event">
+                                        大会・イベント費
+                                      </option>
+                                      <option value="uniform">
+                                        ユニフォーム代
+                                      </option>
+                                      <option value="other">その他</option>
+                                      <option value="refund">
+                                        返金（管理者から保護者へ）
+                                      </option>
+                                    </select>
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <label className="block text-sm font-bold text-gray-900">
+                                      金額
+                                    </label>
+                                    <input
+                                      name="amount"
+                                      type="number"
+                                      min={0}
+                                      defaultValue={item.amount}
+                                      className={fieldClass}
+                                    />
+                                    <p className="mt-1 text-xs font-medium text-gray-600">
+                                      返金も正の金額で入力します。
+                                    </p>
+                                  </div>
+
+                                  <div className="flex min-w-0 items-end">
+                                    <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                                      修正
+                                    </SubmitButton>
+                                  </div>
+
+                                  <div className="min-w-0 sm:col-span-4">
+                                    <label className="block text-sm font-bold text-gray-900">
+                                      備考
+                                    </label>
+                                    <input
+                                      name="note"
+                                      defaultValue={item.note ?? ""}
+                                      className={fieldClass}
+                                    />
+                                  </div>
+                                </form>
+                              </details>
                             </div>
-
-                            <details className="mt-4 rounded bg-gray-50 p-3">
-                              <summary className="cursor-pointer font-bold text-gray-900">
-                                請求内容を修正
-                              </summary>
-
-                              <form
-                                action={updateBillingItem}
-                                className="mt-3 grid min-w-0 gap-3 sm:grid-cols-4"
-                              >
-                                <input
-                                  type="hidden"
-                                  name="item_id"
-                                  value={item.id}
-                                />
-
-                                <div className="min-w-0">
-                                  <label className="block text-sm font-bold text-gray-900">
-                                    対象月
-                                  </label>
-                                  <input
-                                    name="target_month"
-                                    type="month"
-                                    defaultValue={item.target_month}
-                                    className={fieldClass}
-                                  />
-                                </div>
-
-                                <div className="min-w-0">
-                                  <label className="block text-sm font-bold text-gray-900">
-                                    費目
-                                  </label>
-                                  <select
-                                    name="category"
-                                    defaultValue={item.category}
-                                    className={fieldClass}
-                                  >
-                                    <option value="tuition">月謝</option>
-                                    <option value="trip">遠征費</option>
-                                    <option value="event">
-                                      大会・イベント費
-                                    </option>
-                                    <option value="uniform">
-                                      ユニフォーム代
-                                    </option>
-                                    <option value="other">その他</option>
-                                  </select>
-                                </div>
-
-                                <div className="min-w-0">
-                                  <label className="block text-sm font-bold text-gray-900">
-                                    金額
-                                  </label>
-                                  <input
-                                    name="amount"
-                                    type="number"
-                                    min={0}
-                                    defaultValue={item.amount}
-                                    className={fieldClass}
-                                  />
-                                </div>
-
-                                <div className="flex min-w-0 items-end">
-                                  <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
-                                    修正
-                                  </SubmitButton>
-                                </div>
-
-                                <div className="min-w-0 sm:col-span-4">
-                                  <label className="block text-sm font-bold text-gray-900">
-                                    備考
-                                  </label>
-                                  <input
-                                    name="note"
-                                    defaultValue={item.note ?? ""}
-                                    className={fieldClass}
-                                  />
-                                </div>
-                              </form>
-                            </details>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -563,9 +641,34 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                           >
                             <span className="font-medium text-gray-900">
                               {formatTargetMonth(item.target_month)}{" "}
-                              {categoryLabel(item.category)}
+                              {itemLabel(item)}
                             </span>
                             <span className="font-bold text-red-700">
+                              {formatYen(item.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {unsettledRefundItems.length > 0 && (
+                    <div className="mt-5">
+                      <h3 className="font-bold text-blue-700">
+                        未清算返金内訳
+                      </h3>
+
+                      <div className="mt-2 space-y-2">
+                        {unsettledRefundItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between gap-3 rounded bg-blue-50 px-3 py-2 text-sm"
+                          >
+                            <span className="font-medium text-gray-900">
+                              {formatTargetMonth(item.target_month)}{" "}
+                              {itemLabel(item)}
+                            </span>
+                            <span className="font-bold text-blue-700">
                               {formatYen(item.amount)}
                             </span>
                           </div>

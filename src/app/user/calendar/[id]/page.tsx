@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -25,17 +26,6 @@ function formatDate(value: string | null) {
     dateStyle: "full",
     timeZone: "Asia/Tokyo",
   }).format(new Date(value));
-}
-
-function toDateKey(value: string | null) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -126,12 +116,12 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
             予定が見つかりません。
           </p>
 
-          <a
+          <Link
             href="/user/calendar"
             className="mt-6 inline-block rounded border bg-white px-4 py-2"
           >
             カレンダーに戻る
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -163,7 +153,6 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
   };
 
   const myResponse = response as EventResponse | null;
-  const eventDate = toDateKey(event.start_at);
   const eventYear = new Date(event.start_at).getFullYear();
   const eventMonth = new Date(event.start_at).getMonth() + 1;
 
@@ -178,12 +167,12 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
             </p>
           </div>
 
-          <a
+          <Link
             href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
             className="rounded border bg-white px-4 py-2 text-center"
           >
             カレンダーに戻る
-          </a>
+          </Link>
         </div>
 
         <section className="mt-6 rounded-lg bg-white p-6 shadow">
@@ -311,12 +300,12 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
           </section>
         )}
 
-        <a
+        <Link
           href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
           className="mt-6 inline-block rounded border bg-white px-4 py-2"
         >
           戻る
-        </a>
+        </Link>
       </div>
     </main>
   );
