@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import PendingNavigationButton from "@/components/PendingNavigationButton";
 import SubmitButton from "@/components/SubmitButton";
 import MemberProfileForm from "./MemberProfileForm";
 
@@ -52,19 +53,19 @@ export default async function AdminMembersPage() {
           </div>
 
           <div className="flex gap-2">
-            <a
+            <PendingNavigationButton
               href="/admin"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               管理者画面に戻る
-            </a>
+            </PendingNavigationButton>
 
-            <a
+            <PendingNavigationButton
               href="/logout"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               ログアウト
-            </a>
+            </PendingNavigationButton>
           </div>
         </div>
 

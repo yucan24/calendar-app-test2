@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PendingNavigationButton from "@/components/PendingNavigationButton";
 import { requireAdmin } from "@/lib/auth";
 
 export default async function AdminPage() {
@@ -15,12 +16,12 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <Link
+          <PendingNavigationButton
             href="/logout"
             className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
           >
             ログアウト
-          </Link>
+          </PendingNavigationButton>
         </div>
 
         <div className="mt-8 grid gap-5">
@@ -43,6 +44,16 @@ export default async function AdminPage() {
             </h2>
             <p className="mt-3 text-base font-medium text-gray-700">
               指導時間、事務作業時間、交通費、立替費用を記録・集計します。
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/accounting"
+            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
+          >
+            <h2 className="text-2xl font-bold text-gray-900">会計管理</h2>
+            <p className="mt-3 text-base font-medium text-gray-700">
+              月謝収入、協賛金、指導者報酬、源泉税を月単位で確認します。
             </p>
           </Link>
 

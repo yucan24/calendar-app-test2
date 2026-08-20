@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import PendingNavigationButton from "@/components/PendingNavigationButton";
 import SubmitButton from "@/components/SubmitButton";
 import BillingStatusButtons from "./BillingStatusButtons";
 
@@ -131,14 +132,14 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   const { data: billingItems, error: billingError } =
     userIds.length > 0
       ? await supabase
-          .from("billing_items")
-          .select(
-            "id, user_id, target_month, category, title, amount, status, note, paid_at"
-          )
-          .eq("group_id", admin.group_id)
-          .in("user_id", userIds)
-          .order("target_month", { ascending: false })
-          .order("created_at", { ascending: false })
+        .from("billing_items")
+        .select(
+          "id, user_id, target_month, category, title, amount, status, note, paid_at"
+        )
+        .eq("group_id", admin.group_id)
+        .in("user_id", userIds)
+        .order("target_month", { ascending: false })
+        .order("created_at", { ascending: false })
       : { data: [], error: null };
 
   if (billingError) {
@@ -183,18 +184,18 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           </div>
 
           <div className="flex gap-2">
-            <a
+            <PendingNavigationButton
               href="/admin"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               管理者画面に戻る
-            </a>
-            <a
+            </PendingNavigationButton>
+            <PendingNavigationButton
               href="/logout"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               ログアウト
-            </a>
+            </PendingNavigationButton>
           </div>
         </div>
 
@@ -418,7 +419,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                           <option value="uniform">ユニフォーム代</option>
                           <option value="other">その他</option>
                           <option value="refund">
-                            返金（管理者から保護者へ）
+                            返金
                           </option>
                         </select>
                       </div>
@@ -583,7 +584,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                       </option>
                                       <option value="other">その他</option>
                                       <option value="refund">
-                                        返金（管理者から保護者へ）
+                                        返金
                                       </option>
                                     </select>
                                   </div>

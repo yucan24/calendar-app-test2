@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import PendingNavigationButton from "@/components/PendingNavigationButton";
 import SubmitButton from "@/components/SubmitButton";
 
 type CalendarEvent = {
@@ -260,9 +261,12 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          <a href="/admin" className="rounded border bg-white px-4 py-2">
+          <PendingNavigationButton
+            href="/admin"
+            className="rounded border bg-white px-4 py-2"
+          >
             管理者画面に戻る
-          </a>
+          </PendingNavigationButton>
         </div>
 
         <section className="mt-8 rounded-lg bg-white p-4 shadow">
@@ -272,25 +276,25 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
             </h2>
 
             <div className="flex gap-2">
-              <a
- 		 href={`/admin/calendar?year=${prev.year}&month=${prev.month}&date=${prev.year}-${String(prev.month).padStart(2, "0")}-01`}
-		 className="rounded border px-3 py-2 text-sm"
-	      >
-                 前月
-              </a>
-	      <a
-		  href={`/admin/calendar?year=${today.getFullYear()}&month=${today.getMonth() + 1}&date=${todayKey}`}
-  		　className="rounded border px-3 py-2 text-sm"
+              <PendingNavigationButton
+                href={`/admin/calendar?year=${prev.year}&month=${prev.month}&date=${prev.year}-${String(prev.month).padStart(2, "0")}-01`}
+                className="rounded border px-3 py-2 text-sm"
+              >
+                前月
+              </PendingNavigationButton>
+              <PendingNavigationButton
+                href={`/admin/calendar?year=${today.getFullYear()}&month=${today.getMonth() + 1}&date=${todayKey}`}
+                className="rounded border px-3 py-2 text-sm"
               >
                 今月
-              </a>
+              </PendingNavigationButton>
 
-              <a
-  		href={`/admin/calendar?year=${next.year}&month=${next.month}&date=${next.year}-${String(next.month).padStart(2, "0")}-01`}
-  		className="rounded border px-3 py-2 text-sm"
+              <PendingNavigationButton
+                href={`/admin/calendar?year=${next.year}&month=${next.month}&date=${next.year}-${String(next.month).padStart(2, "0")}-01`}
+                className="rounded border px-3 py-2 text-sm"
               >
                 翌月
-              </a>
+              </PendingNavigationButton>
             </div>
           </div>
 

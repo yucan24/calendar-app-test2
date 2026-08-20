@@ -6,6 +6,7 @@ import type {
 } from "react";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import PendingNavigationButton from "@/components/PendingNavigationButton";
 import SubmitButton from "@/components/SubmitButton";
 import {
   createCoachWorkLogs,
@@ -873,18 +874,18 @@ export default function CoachWorkCalendarClient({
           </div>
 
           <div className="flex gap-2">
-            <a
+            <PendingNavigationButton
               href="/admin"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               管理者画面に戻る
-            </a>
-            <a
+            </PendingNavigationButton>
+            <PendingNavigationButton
               href="/logout"
               className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
             >
               ログアウト
-            </a>
+            </PendingNavigationButton>
           </div>
         </div>
 
@@ -895,24 +896,24 @@ export default function CoachWorkCalendarClient({
             </h2>
 
             <div className="flex gap-2">
-              <a
+              <PendingNavigationButton
                 href={`/admin/coach-work?month=${prevMonth}`}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
-              </a>
-              <a
+              </PendingNavigationButton>
+              <PendingNavigationButton
                 href={`/admin/coach-work?month=${currentMonth}`}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 今月
-              </a>
-              <a
+              </PendingNavigationButton>
+              <PendingNavigationButton
                 href={`/admin/coach-work?month=${nextMonth}`}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月
-              </a>
+              </PendingNavigationButton>
             </div>
           </div>
 
