@@ -1,29 +1,24 @@
 import PendingNavigationButton from "@/components/PendingNavigationButton";
-import SubmitButton from "@/components/SubmitButton";
 import {
   buildAccountingReport,
-  incomeCategoryLabel,
   type AccountingBillingItem,
   type AccountingCoach,
   type AccountingCoachWorkLog,
+  type AccountingExpenseItem,
   type AccountingIncomeItem,
+  type AccountingRewardAdjustment,
 } from "@/lib/accounting";
 import { requireAdmin } from "@/lib/auth";
 import {
   formatTargetMonth,
-  formatYen,
   getCurrentTargetMonth,
   getNextTargetMonth,
   getPrevTargetMonth,
   isValidTargetMonth,
 } from "@/lib/month";
 import { supabase } from "@/lib/supabase";
+import AccountingManagementPanel from "./AccountingManagementPanel";
 import AccountingReportClient from "./AccountingReportClient";
-import IncomeItemDeleteForm from "./IncomeItemDeleteForm";
-import {
-  createAccountingIncomeItem,
-  updateAccountingIncomeItem,
-} from "./actions";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -31,18 +26,8 @@ type PageProps = {
   }>;
 };
 
-const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
-
 function getMonthStartDate(targetMonth: string) {
   return `${targetMonth}-01`;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "medium",
-    timeZone: "Asia/Tokyo",
-  }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
 export default async function AdminAccountingPage({ searchParams }: PageProps) {
@@ -62,7 +47,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
 
   const { data: coaches, error: coachesError } = await supabase
     .from("profiles")
-    .select("id, name")
+    .select("id, name, coach_hourly_rate")
     .eq("group_id", admin.group_id)
     .eq("role", "admin")
     .eq("login_enabled", true)
@@ -75,7 +60,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
   const { data: logs, error: logsError } = await supabase
     .from("coach_work_logs")
     .select(
-      "coach_id, coaching_minutes, admin_minutes, travel_expense, other_expense"
+      "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
     )
     .eq("group_id", admin.group_id)
     .gte("work_date", monthStart)
@@ -108,10 +93,32 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
     throw new Error(incomeError.message);
   }
 
+  const { data: expenseItems, error: expenseError } = await supabase.rpc(
+    "list_accounting_expense_items",
+    {
+      p_admin_profile_id: admin.id,
+      p_target_month: targetMonth,
+    }
+  );
+
+  if (expenseError) {
+    throw new Error(expenseError.message);
+  }
+
+  const { data: rewardAdjustments, error: rewardAdjustmentError } =
+    await supabase.rpc("list_coach_reward_adjustments", {
+      p_admin_profile_id: admin.id,
+      p_target_month: targetMonth,
+    });
+
+  if (rewardAdjustmentError) {
+    throw new Error(rewardAdjustmentError.message);
+  }
+
   const { data: cumulativeLogs, error: cumulativeLogsError } = await supabase
     .from("coach_work_logs")
     .select(
-      "coach_id, coaching_minutes, admin_minutes, travel_expense, other_expense"
+      "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
     )
     .eq("group_id", admin.group_id)
     .lt("work_date", monthEnd);
@@ -142,19 +149,57 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
     throw new Error(cumulativeIncomeError.message);
   }
 
+  const { data: cumulativeExpenseItems, error: cumulativeExpenseError } =
+    await supabase.rpc("list_accounting_expense_items_until", {
+      p_admin_profile_id: admin.id,
+      p_target_month: targetMonth,
+    });
+
+  if (cumulativeExpenseError) {
+    throw new Error(cumulativeExpenseError.message);
+  }
+
+  const {
+    data: cumulativeRewardAdjustments,
+    error: cumulativeRewardAdjustmentError,
+  } = await supabase.rpc("list_coach_reward_adjustments_until", {
+    p_admin_profile_id: admin.id,
+    p_target_month: targetMonth,
+  });
+
+  if (cumulativeRewardAdjustmentError) {
+    throw new Error(cumulativeRewardAdjustmentError.message);
+  }
+
+  const coachList = (coaches ?? []) as AccountingCoach[];
   const incomeList = (incomeItems ?? []) as AccountingIncomeItem[];
+  const expenseList = (expenseItems ?? []) as AccountingExpenseItem[];
+  const rewardAdjustmentList =
+    (rewardAdjustments ?? []) as AccountingRewardAdjustment[];
   const report = buildAccountingReport({
-    coaches: (coaches ?? []) as AccountingCoach[],
+    coaches: coachList,
     logs: (logs ?? []) as AccountingCoachWorkLog[],
     billingItems: (billingItems ?? []) as AccountingBillingItem[],
     incomeItems: incomeList,
+    expenseItems: expenseList,
+    rewardAdjustments: rewardAdjustmentList,
   });
   const cumulativeReport = buildAccountingReport({
-    coaches: (coaches ?? []) as AccountingCoach[],
+    coaches: coachList,
     logs: (cumulativeLogs ?? []) as AccountingCoachWorkLog[],
     billingItems: (cumulativeBillingItems ?? []) as AccountingBillingItem[],
     incomeItems: (cumulativeIncomeItems ?? []) as AccountingIncomeItem[],
+    expenseItems: (cumulativeExpenseItems ?? []) as AccountingExpenseItem[],
+    rewardAdjustments:
+      (cumulativeRewardAdjustments ?? []) as AccountingRewardAdjustment[],
   });
+  const visibleReportRows = report.rows.filter(
+    (row) =>
+      row.totalWorkMinutes > 0 ||
+      row.baseReward > 0 ||
+      row.rewardCutTotal > 0 ||
+      row.netPay !== 0
+  );
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
@@ -214,236 +259,25 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
           </div>
         </section>
 
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <details open>
-            <summary className="cursor-pointer text-lg font-bold text-gray-900">
-              協賛金・その他収入を追加
-            </summary>
+        <div className="mt-6 space-y-6">
+          <AccountingReportClient
+            targetMonth={targetMonth}
+            rows={visibleReportRows}
+            totals={report.totals}
+            incomeItems={incomeList}
+            expenseItems={expenseList}
+            cumulativeBalance={cumulativeReport.totals.balance}
+          />
 
-            <form
-              action={createAccountingIncomeItem}
-              className="mt-4 grid min-w-0 gap-3 sm:grid-cols-5"
-            >
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  受取日
-                </label>
-                <input
-                  name="received_on"
-                  type="date"
-                  defaultValue={monthStart}
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  種別
-                </label>
-                <select
-                  name="category"
-                  defaultValue="sponsorship"
-                  className={fieldClass}
-                >
-                  <option value="sponsorship">協賛金</option>
-                  <option value="other">その他収入</option>
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  支払者
-                </label>
-                <input
-                  name="payer_name"
-                  required
-                  className={fieldClass}
-                  placeholder="例：山田太郎 / ○○会社"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  金額
-                </label>
-                <input
-                  name="amount"
-                  type="number"
-                  min={0}
-                  required
-                  className={fieldClass}
-                  placeholder="10000"
-                />
-              </div>
-
-              <div className="flex min-w-0 items-end">
-                <SubmitButton
-                  pendingText="追加中..."
-                  className="w-full rounded bg-black px-4 py-3 font-bold text-white"
-                >
-                  追加
-                </SubmitButton>
-              </div>
-
-              <div className="min-w-0 sm:col-span-5">
-                <label className="block text-sm font-bold text-gray-900">
-                  備考
-                </label>
-                <input
-                  name="note"
-                  className={fieldClass}
-                  placeholder="例：大会協賛、振込確認済み"
-                />
-              </div>
-            </form>
-          </details>
-        </section>
-
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-bold text-gray-900">
-              協賛金・その他収入
-            </h2>
-            <p className="text-sm font-bold text-gray-700">
-              合計 {formatYen(report.totals.incomeItemsTotal)}
-            </p>
-          </div>
-
-          {incomeList.length === 0 ? (
-            <p className="mt-3 rounded bg-gray-50 p-3 text-sm font-medium text-gray-700">
-              この月の協賛金・その他収入はありません。
-            </p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {incomeList.map((item) => (
-                <article
-                  key={item.id}
-                  className="rounded border border-gray-300 bg-white p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded bg-cyan-50 px-2 py-1 text-xs font-bold text-cyan-800">
-                          {incomeCategoryLabel(item.category)}
-                        </span>
-                        <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800">
-                          {formatDate(item.received_on)}
-                        </span>
-                      </div>
-
-                      <h3 className="mt-2 text-lg font-bold text-gray-900">
-                        {item.payer_name}
-                      </h3>
-                      <p className="mt-1 font-bold text-gray-900">
-                        {formatYen(item.amount)}
-                      </p>
-
-                      {item.note && (
-                        <p className="mt-2 rounded bg-gray-50 p-2 text-sm font-medium text-gray-800">
-                          備考：{item.note}
-                        </p>
-                      )}
-                    </div>
-
-                    <IncomeItemDeleteForm itemId={item.id} />
-                  </div>
-
-                  <details className="mt-4 rounded bg-gray-50 p-3">
-                    <summary className="cursor-pointer font-bold text-gray-900">
-                      内容を修正
-                    </summary>
-
-                    <form
-                      action={updateAccountingIncomeItem}
-                      className="mt-3 grid min-w-0 gap-3 sm:grid-cols-5"
-                    >
-                      <input type="hidden" name="item_id" value={item.id} />
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          受取日
-                        </label>
-                        <input
-                          name="received_on"
-                          type="date"
-                          defaultValue={item.received_on}
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          種別
-                        </label>
-                        <select
-                          name="category"
-                          defaultValue={item.category}
-                          className={fieldClass}
-                        >
-                          <option value="sponsorship">協賛金</option>
-                          <option value="other">その他収入</option>
-                        </select>
-                      </div>
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          支払者
-                        </label>
-                        <input
-                          name="payer_name"
-                          defaultValue={item.payer_name}
-                          required
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="min-w-0">
-                        <label className="block text-sm font-bold text-gray-900">
-                          金額
-                        </label>
-                        <input
-                          name="amount"
-                          type="number"
-                          min={0}
-                          defaultValue={item.amount}
-                          className={fieldClass}
-                        />
-                      </div>
-
-                      <div className="flex min-w-0 items-end">
-                        <SubmitButton
-                          pendingText="修正中..."
-                          className="w-full rounded bg-black px-4 py-3 font-bold text-white"
-                        >
-                          修正
-                        </SubmitButton>
-                      </div>
-
-                      <div className="min-w-0 sm:col-span-5">
-                        <label className="block text-sm font-bold text-gray-900">
-                          備考
-                        </label>
-                        <input
-                          name="note"
-                          defaultValue={item.note ?? ""}
-                          className={fieldClass}
-                        />
-                      </div>
-                    </form>
-                  </details>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <AccountingReportClient
-          targetMonth={targetMonth}
-          rows={report.rows}
-          totals={report.totals}
-          incomeItems={incomeList}
-          cumulativeBalance={cumulativeReport.totals.balance}
-        />
+          <AccountingManagementPanel
+            coachList={coachList}
+            rewardAdjustmentList={rewardAdjustmentList}
+            incomeList={incomeList}
+            expenseList={expenseList}
+            monthStart={monthStart}
+            totals={report.totals}
+          />
+        </div>
       </div>
     </main>
   );

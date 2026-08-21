@@ -20,7 +20,7 @@ export default function IncomeItemDeleteForm({ itemId }: Props) {
       <input type="hidden" name="item_id" value={itemId} />
       <SubmitButton
         pendingText="削除中..."
-        className="rounded bg-red-600 px-4 py-2 text-sm font-bold text-white"
+        className="rounded border border-red-300 bg-white px-3 py-2 text-sm font-bold text-red-700"
       >
         削除
       </SubmitButton>
