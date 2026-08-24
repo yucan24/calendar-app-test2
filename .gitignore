@@ -6,3 +6,6 @@ tsconfig.tsbuildinfo
 .env.local
 .env.*.local
 .vercel
+
+# 実データを含む銀行CSV
+533024*.csv

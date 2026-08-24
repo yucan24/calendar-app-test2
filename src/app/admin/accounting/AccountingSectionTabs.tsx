@@ -33,7 +33,7 @@ export default function AccountingSectionTabs({
         <div
           role="tablist"
           aria-label="設定・記録"
-          className="grid gap-2 md:grid-cols-3"
+          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
         >
           {tabs.map((tab, index) => {
             const selected = activeIndex === index;

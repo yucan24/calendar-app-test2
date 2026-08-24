@@ -16,8 +16,6 @@ import ExpenseItemDeleteForm from "./ExpenseItemDeleteForm";
 import IncomeItemDeleteForm from "./IncomeItemDeleteForm";
 import RewardAdjustmentDeleteForm from "./RewardAdjustmentDeleteForm";
 import {
-  createAccountingExpenseItem,
-  createAccountingIncomeItem,
   createCoachRewardAdjustment,
   updateAccountingExpenseItem,
   updateAccountingIncomeItem,
@@ -32,6 +30,9 @@ type Props = {
   expenseList: AccountingExpenseItem[];
   monthStart: string;
   totals: AccountingReportTotals;
+  aliasesPanel: ReactNode;
+  incomeBankTransactionByItemId: Record<string, string>;
+  expenseBankTransactionByItemId: Record<string, string>;
 };
 
 const fieldClass =
@@ -88,175 +89,23 @@ export default function AccountingManagementPanel({
   expenseList,
   monthStart,
   totals,
+  aliasesPanel,
+  incomeBankTransactionByItemId,
+  expenseBankTransactionByItemId,
 }: Props) {
   return (
     <div className="space-y-5">
       <section className="rounded-lg border border-gray-300 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-gray-300 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-gray-900">入力</h2>
+          <h2 className="text-lg font-bold text-gray-900">報酬調整</h2>
           <div className="flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded bg-green-50 px-2 py-1 text-green-800">
-              入金 {formatYen(totals.incomeItemsTotal)}
-            </span>
-            <span className="rounded bg-rose-50 px-2 py-1 text-rose-800">
-              出費 {formatYen(totals.expenseItemsTotal)}
-            </span>
             <span className="rounded bg-gray-100 px-2 py-1 text-gray-800">
               報酬調整 {rewardAdjustmentList.length}件
             </span>
           </div>
         </div>
 
-        <div className="lg:grid lg:grid-cols-3">
-          <AddPanel title="入金を追加" meta="協賛金など">
-            <form
-              action={createAccountingIncomeItem}
-              className="mt-3 grid min-w-0 gap-3"
-            >
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  受取日
-                </label>
-                <input
-                  name="received_on"
-                  type="date"
-                  defaultValue={monthStart}
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  種別
-                </label>
-                <select
-                  name="category"
-                  defaultValue="sponsorship"
-                  className={fieldClass}
-                >
-                  <option value="sponsorship">協賛金</option>
-                  <option value="other">その他収入</option>
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  支払者
-                </label>
-                <input
-                  name="payer_name"
-                  required
-                  className={fieldClass}
-                  placeholder="例：山田太郎 / ○○会社"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  金額
-                </label>
-                <input
-                  name="amount"
-                  type="number"
-                  min={0}
-                  required
-                  className={fieldClass}
-                  placeholder="10000"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  備考
-                </label>
-                <input
-                  name="note"
-                  className={fieldClass}
-                  placeholder="例：大会協賛、振込確認済み"
-                />
-              </div>
-
-              <SubmitButton className="rounded bg-black px-4 py-3 font-bold text-white">
-                追加
-              </SubmitButton>
-            </form>
-          </AddPanel>
-
-          <AddPanel title="出費を追加" meta="大会費・手数料">
-            <form
-              action={createAccountingExpenseItem}
-              className="mt-3 grid min-w-0 gap-3"
-            >
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  支払日
-                </label>
-                <input
-                  name="spent_on"
-                  type="date"
-                  defaultValue={monthStart}
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  種別
-                </label>
-                <select
-                  name="category"
-                  defaultValue="event"
-                  className={fieldClass}
-                >
-                  <option value="event">大会・イベント費</option>
-                  <option value="fee">手数料</option>
-                  <option value="other">その他出費</option>
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  支払先
-                </label>
-                <input
-                  name="payee_name"
-                  required
-                  className={fieldClass}
-                  placeholder="例：大会事務局"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  金額
-                </label>
-                <input
-                  name="amount"
-                  type="number"
-                  min={0}
-                  required
-                  className={fieldClass}
-                  placeholder="5000"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-sm font-bold text-gray-900">
-                  備考
-                </label>
-                <input
-                  name="note"
-                  className={fieldClass}
-                  placeholder="例：大会参加費、振込済み"
-                />
-              </div>
-
-              <SubmitButton className="rounded bg-black px-4 py-3 font-bold text-white">
-                追加
-              </SubmitButton>
-            </form>
-          </AddPanel>
-
+        <div>
           <AddPanel title="報酬調整を追加" meta="時給カット">
             <form
               action={createCoachRewardAdjustment}
@@ -362,6 +211,11 @@ export default function AccountingManagementPanel({
               id: "transactions",
               label: "入出金",
               meta: `入金 ${incomeList.length}件 / 出費 ${expenseList.length}件`,
+            },
+            {
+              id: "aliases",
+              label: "口座名義",
+              meta: "振込名義の設定",
             },
           ]}
           initialTabId={
@@ -590,6 +444,11 @@ export default function AccountingManagementPanel({
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800">
                               {formatDate(item.received_on)}
                             </span>
+                            <span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800">
+                              {incomeBankTransactionByItemId[item.id]
+                                ? `銀行明細 ${incomeBankTransactionByItemId[item.id]}`
+                                : "手入力"}
+                            </span>
                           </div>
                           <p className="mt-2 font-bold text-gray-900">
                             {item.payer_name}
@@ -605,12 +464,19 @@ export default function AccountingManagementPanel({
                           <p className="font-bold text-green-700">
                             {formatYen(item.amount)}
                           </p>
-                          <div className="mt-2">
-                            <IncomeItemDeleteForm itemId={item.id} />
-                          </div>
+                          {!incomeBankTransactionByItemId[item.id] && (
+                            <div className="mt-2">
+                              <IncomeItemDeleteForm itemId={item.id} />
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {incomeBankTransactionByItemId[item.id] ? (
+                        <p className="mt-3 rounded bg-blue-50 p-3 text-sm font-medium text-blue-900">
+                          銀行由来の項目です。修正する場合は「処理履歴」から紐付けを取り消してください。
+                        </p>
+                      ) : (
                       <details className="group mt-3 rounded border border-gray-200 bg-gray-50">
                         <summary className={summaryClass}>
                           <span>修正</span>
@@ -697,6 +563,7 @@ export default function AccountingManagementPanel({
                           </div>
                         </form>
                       </details>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -728,6 +595,11 @@ export default function AccountingManagementPanel({
                             <span className="rounded bg-gray-100 px-2 py-1 text-xs font-bold text-gray-800">
                               {formatDate(item.spent_on)}
                             </span>
+                            <span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-800">
+                              {expenseBankTransactionByItemId[item.id]
+                                ? `銀行明細 ${expenseBankTransactionByItemId[item.id]}`
+                                : "手入力"}
+                            </span>
                           </div>
                           <p className="mt-2 font-bold text-gray-900">
                             {item.payee_name}
@@ -743,12 +615,19 @@ export default function AccountingManagementPanel({
                           <p className="font-bold text-rose-700">
                             {formatYen(item.amount)}
                           </p>
-                          <div className="mt-2">
-                            <ExpenseItemDeleteForm itemId={item.id} />
-                          </div>
+                          {!expenseBankTransactionByItemId[item.id] && (
+                            <div className="mt-2">
+                              <ExpenseItemDeleteForm itemId={item.id} />
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {expenseBankTransactionByItemId[item.id] ? (
+                        <p className="mt-3 rounded bg-blue-50 p-3 text-sm font-medium text-blue-900">
+                          銀行由来の項目です。修正する場合は「処理履歴」から紐付けを取り消してください。
+                        </p>
+                      ) : (
                       <details className="group mt-3 rounded border border-gray-200 bg-gray-50">
                         <summary className={summaryClass}>
                           <span>修正</span>
@@ -836,6 +715,7 @@ export default function AccountingManagementPanel({
                           </div>
                         </form>
                       </details>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -843,6 +723,8 @@ export default function AccountingManagementPanel({
             </section>
           </div>
           </section>
+
+          <section>{aliasesPanel}</section>
         </AccountingSectionTabs>
       </section>
     </div>

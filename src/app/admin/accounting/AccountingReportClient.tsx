@@ -935,7 +935,14 @@ export default function AccountingReportClient({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-sm">
+        <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[14%]" />
+            <col className="w-[16%]" />
+            <col className="w-[27%]" />
+            <col className="w-[13%]" />
+            <col className="w-[30%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-gray-300 text-left text-xs font-bold text-gray-600">
               <th className="py-3 pr-3">指導者</th>
@@ -949,7 +956,7 @@ export default function AccountingReportClient({
           <tbody>
             {rows.map((row) => (
               <tr key={row.coachId} className="border-b border-gray-200">
-                <td className="py-4 pr-3 align-top font-bold text-gray-900">
+                <td className="break-words py-4 pr-3 align-top font-bold text-gray-900">
                   {row.coachName}
                 </td>
                 <td className="px-3 py-4 align-top">

@@ -53,7 +53,7 @@ export default async function AdminPage() {
           >
             <h2 className="text-2xl font-bold text-gray-900">会計管理</h2>
             <p className="mt-3 text-base font-medium text-gray-700">
-              月謝収入、協賛金、指導者報酬、源泉税を月単位で確認します。
+              集計、銀行CSVの取込、入出金照合、指導者報酬をまとめて管理します。
             </p>
           </Link>
 
