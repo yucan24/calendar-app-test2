@@ -12,3 +12,6 @@ tsconfig.tsbuildinfo
 .env*
 !.env.example
 !.env.production.example
+
+# 実名・勤務時間・会計資料を含むテスト用原本
+testdata/

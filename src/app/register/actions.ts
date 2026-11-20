@@ -1,7 +1,9 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { allowAuthAttempt } from "@/lib/authRateLimit";
+import { notifyRegistration } from "@/lib/accountLinks";
 
 export type RegisterState = {
   ok: boolean;
@@ -35,7 +37,6 @@ export async function registerMember(
 ): Promise<RegisterState> {
   const name = normalizeName(formData.get("name"));
   const email = cleanText(formData.get("email"));
-  const loginCode = cleanText(formData.get("login_code"));
 
   if (!name || name.length > 100) {
     return {
@@ -48,13 +49,6 @@ export async function registerMember(
     return {
       ok: false,
       message: "正しいメールアドレスを入力してください。",
-    };
-  }
-
-  if (!/^\d{4}$/.test(loginCode)) {
-    return {
-      ok: false,
-      message: "ログインコードは4桁の数字で入力してください。",
     };
   }
 
@@ -108,14 +102,14 @@ export async function registerMember(
     };
   }
 
-  const { error: insertError } = await supabase.from("profiles").insert({
+  const { data: inserted, error: insertError } = await supabase.from("profiles").insert({
     group_id: group.id,
     role: "user",
     name,
     email,
-    login_code: loginCode,
     login_enabled: false,
-  });
+    account_status: "pending",
+  }).select("id").single();
 
   if (insertError) {
     if (isDuplicateNameError(insertError)) {
@@ -131,8 +125,8 @@ export async function registerMember(
     };
   }
 
-  return {
-    ok: true,
-    message: "登録を受け付けました。管理者の承認後にログインできます。",
-  };
+  if (inserted) {
+    try { await notifyRegistration(inserted.id, name, email); } catch { /* 申請を保存した状態で再送できるようにする。 */ }
+  }
+  redirect("/register/thanks");
 }

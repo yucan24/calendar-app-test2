@@ -1,8 +1,10 @@
+import LogoutButton from "@/components/LogoutButton";
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import PendingNavigationButton from "@/components/PendingNavigationButton";
 import SubmitButton from "@/components/SubmitButton";
 import BillingStatusButtons from "./BillingStatusButtons";
+import { accountStatusLabels } from "@/lib/accountPolicy";
 
 import {
   createBillingItem,
@@ -27,6 +29,7 @@ type Profile = {
   name: string;
   email: string;
   role: "admin" | "user";
+  account_status: string;
 };
 
 type BillingItem = {
@@ -116,17 +119,16 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   const { data: users, error: usersError } = await supabase
     .from("profiles")
-    .select("id, name, email, role")
+    .select("id, name, email, role, account_status")
     .eq("group_id", admin.group_id)
-    .eq("role", "user")
-    .eq("login_enabled", true)
     .order("name", { ascending: true });
 
   if (usersError) {
     throw new Error(usersError.message);
   }
 
-  const userList = (users ?? []) as Profile[];
+  const allUsers = (users ?? []) as Profile[];
+  const userList = allUsers;
   const userIds = userList.map((user) => user.id);
 
   const { data: billingItems, error: billingError } =
@@ -147,6 +149,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   }
 
   const itemList = (billingItems ?? []) as BillingItem[];
+  const listedUsers = userList.filter(user => (user.role === "user" && user.account_status === "active") || itemList.some(item => item.user_id === user.id));
 
   const itemsByUser = new Map<string, BillingItem[]>();
 
@@ -190,12 +193,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             >
               管理者画面に戻る
             </PendingNavigationButton>
-            <PendingNavigationButton
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </PendingNavigationButton>
+            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
           </div>
         </div>
 
@@ -292,7 +290,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         </section>
 
         <section className="mt-6 space-y-4">
-          {userList.map((user) => {
+          {listedUsers.map((user) => {
             const items = itemsByUser.get(user.id) ?? [];
             const unpaidItems = items.filter(
               (item) => item.status === "unpaid" && !isRefundItem(item)
@@ -325,6 +323,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">
                       {user.name}
+                      {user.account_status !== "active" && <span className="ml-2 text-sm">（{accountStatusLabels[user.account_status]}・履歴参照）</span>}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-gray-700">
                       {user.email}
@@ -383,7 +382,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                     請求項目を管理
                   </summary>
 
-                  <div className="mt-4 rounded bg-white p-4">
+                  {user.account_status === "active" && <div className="mt-4 rounded bg-white p-4">
                     <h3 className="font-bold text-gray-900">請求項目を追加</h3>
 
                     <form
@@ -460,7 +459,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         />
                       </div>
                     </form>
-                  </div>
+                  </div>}
 
                   <div className="mt-4">
                     <h3 className="font-bold text-gray-900">

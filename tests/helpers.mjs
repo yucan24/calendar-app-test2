@@ -3,6 +3,7 @@ import { resolve, dirname } from "node:path";
 import Module from "node:module";
 import ts from "typescript";
 import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 export function loadTs(filename, mocks = {}) {
   const fullPath = resolve(filename);
@@ -12,19 +13,17 @@ export function loadTs(filename, mocks = {}) {
   const originalRequire = compiled.require.bind(compiled);
   compiled.require = (name) => Object.hasOwn(mocks, name) ? mocks[name] : originalRequire(name);
   compiled._compile(ts.transpileModule(readFileSync(fullPath, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText, fullPath);
   return compiled.exports;
 }
 
 export async function createTestDatabase(beforeLatest) {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec("create schema extensions; create role anon; create role authenticated; create role service_role bypassrls;");
   for (const filename of readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql")).sort()) {
     if (filename.startsWith("20261120010000_") && beforeLatest) await beforeLatest(db);
-    // gen_random_uuid()はPostgres組込み。PGliteに同梱されないpgcryptoだけ省く。
-    const sql = readFileSync(`supabase/migrations/${filename}`, "utf8")
-      .replaceAll("create extension if not exists pgcrypto with schema extensions;", "");
+    const sql = readFileSync(`supabase/migrations/${filename}`, "utf8");
     try { await db.exec(sql); }
     catch (error) { await db.close(); throw new Error(`${filename}: ${error.message}`); }
   }
@@ -83,15 +82,16 @@ export function postgresClient(db) {
     },
     from(table) {
       const params = [], conditions = [], orders = [];
-      let selection = "*", operation = "select", values, limit, offset;
+      let selection = "*", operation = "select", values, limit, offset = 0;
       const columnList = (columns) => columns === "*" ? "*" : columns.split(",").map((column) => identifier(column.trim())).join(",");
       const bind = (value) => { params.push(value); return `$${params.length}`; };
       const run = (single = false) => {
         let sql;
         if (operation === "insert" || operation === "upsert") {
-          const entries = Object.entries(values);
-          sql = `insert into ${identifier(table)}(${entries.map(([key]) => identifier(key)).join(",")}) values(${entries.map(([, value]) => bind(value)).join(",")})`;
-          if (operation === "upsert") sql += ` on conflict(${conflictColumns.split(",").map(identifier).join(",")}) do update set ${entries.map(([key]) => `${identifier(key)}=excluded.${identifier(key)}`).join(",")}`;
+          const rows = Array.isArray(values) ? values : [values];
+          const columns = Object.keys(rows[0]);
+          sql = `insert into ${identifier(table)}(${columns.map(identifier).join(",")}) values${rows.map((row) => `(${columns.map((key) => bind(row[key])).join(",")})`).join(",")}`;
+          if (operation === "upsert") sql += ` on conflict(${conflictColumns.split(",").map(identifier).join(",")}) do update set ${columns.map((key) => `${identifier(key)}=excluded.${identifier(key)}`).join(",")}`;
           sql += ` returning ${columnList(selection)}`;
         } else if (operation === "update") {
           sql = `update ${identifier(table)} set ${Object.entries(values).map(([key, value]) => `${identifier(key)}=${bind(value)}`).join(",")}`;
@@ -112,11 +112,13 @@ export function postgresClient(db) {
         upsert(data, options) { operation = "upsert"; values = data; conflictColumns = options.onConflict; return query; },
         order(column, options = {}) { orders.push(`${identifier(column)} ${options.ascending === false ? "desc" : "asc"}`); return query; },
         range(from, to) { offset = from; limit = to - from + 1; return query; },
+        limit(count) { limit = count; return query; },
+        in(column, values) { conditions.push(values.length ? `${identifier(column)} in (${values.map(bind).join(",")})` : "false"); return query; },
         single() { return run(true); },
         maybeSingle() { return run(true); },
         then(resolveResult, reject) { return run().then(resolveResult, reject); },
       };
-      for (const [method, operator] of Object.entries({ eq: "=", gt: ">", gte: ">=", lt: "<", lte: "<=" })) {
+      for (const [method, operator] of Object.entries({ eq: "=", neq: "<>", gt: ">", gte: ">=", lt: "<", lte: "<=" })) {
         query[method] = (column, value) => { conditions.push(`${identifier(column)}${operator}${bind(value)}`); return query; };
       }
       return query;

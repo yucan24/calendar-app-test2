@@ -25,10 +25,11 @@ async function signIn(profile) {
 
 function request(cookieValues = {}) {
   const values = new Map(Object.entries(cookieValues));
+  const cookieWrites = [];
   const client = postgresClient(db);
   const mocks = {
     "server-only": {},
-    "next/headers": { cookies: async () => ({ get: (name) => values.has(name) ? { value: values.get(name) } : undefined, delete: (name) => values.delete(name) }) },
+    "next/headers": { cookies: async () => ({ get: (name) => values.has(name) ? { value: values.get(name) } : undefined, delete: (name) => values.delete(name), set: (name, value, options) => { cookieWrites.push({ name, value, options }); if (options?.maxAge === 0) values.delete(name); else values.set(name, value); } }) },
     "next/navigation": { redirect: (url) => { throw new Error(`redirect:${url}`); } },
     "next/cache": { revalidatePath() {} },
     "@/lib/supabase": { supabase: client },
@@ -36,8 +37,43 @@ function request(cookieValues = {}) {
     "@/lib/month": loadTs("src/lib/month.ts"),
   };
   const auth = loadTs("src/lib/auth.ts", mocks);
-  return { auth, values, mocks: { ...mocks, "@/lib/auth": auth } };
+  return { auth, values, cookieWrites, mocks: { ...mocks, "@/lib/auth": auth } };
 }
+
+test("ログアウトURLのGET・先読みではログイン状態を失わない", async () => {
+  const team = await member(), token = await signIn(team.profile);
+  for (const headers of [{}, { RSC: "1", "Next-Router-Prefetch": "1", Purpose: "prefetch" }]) {
+    const current = request({ [session.sessionCookieName()]: token });
+    const route = loadTs("src/app/logout/route.ts", current.mocks);
+    let response;
+    try { response = await route.GET(new Request("https://example.test/logout?_rsc=qa", { headers })); } catch { /* 旧実装のredirectも、セッションの維持を先に検査する。 */ }
+    assert.equal((await current.auth.getCurrentProfile())?.id, team.adminId, "GETの先読みでログアウトしている");
+    assert.equal(response.status, 307);
+    assert.equal(response.headers.get("location"), "/");
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
+});
+
+test("明示的なログアウト送信だけが現在のセッションを失効し、本番Cookieを正しい属性で削除する", async () => {
+  const previous = process.env.NODE_ENV; process.env.NODE_ENV = "production";
+  try {
+    const team = await member(), token = await signIn(team.profile), second = await signIn(team.profile);
+    const current = request({ [session.sessionCookieName()]: token });
+    const action = loadTs("src/app/logout/actions.ts", current.mocks);
+    await assert.rejects(action.logout(), /^Error: redirect:\/login$/);
+    assert.equal(await current.auth.getCurrentProfile(), null);
+    assert.equal((await request({ [session.sessionCookieName()]: second }).auth.getCurrentProfile()).id, team.adminId);
+    const cleared = current.cookieWrites.find(item => item.name === "__Host-nsct_session");
+    assert.equal(cleared.value, "");
+    assert.equal(cleared.options.secure, true);
+    assert.equal(cleared.options.httpOnly, true);
+    assert.equal(cleared.options.sameSite, "lax");
+    assert.equal(cleared.options.path, "/");
+    assert.equal(cleared.options.maxAge, 0);
+    assert.equal(cleared.options.domain, undefined);
+  } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
+});
 
 test("UUID Cookie・改ざん・ランダム値ではなりすませず、DBにはセッションのハッシュだけを保存する", async () => {
   const team = await member();

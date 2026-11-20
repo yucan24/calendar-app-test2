@@ -1,5 +1,5 @@
 import PendingNavigationButton from "@/components/PendingNavigationButton";
-import { formatTargetMonth } from "@/lib/month";
+import { formatTargetMonth, isValidTargetMonth } from "@/lib/month";
 
 type Props = {
   targetMonth: string;
@@ -27,6 +27,7 @@ export default function PaymentMonthSelector({
         <div className="flex flex-wrap gap-2">
           <PendingNavigationButton
             href={`/admin/accounting?tab=reconciliation&month=${previousMonth}`}
+            disabled={!isValidTargetMonth(previousMonth)}
             className="rounded border border-gray-400 bg-white px-3 py-2 font-bold"
           >
             前月
@@ -39,6 +40,7 @@ export default function PaymentMonthSelector({
           </PendingNavigationButton>
           <PendingNavigationButton
             href={`/admin/accounting?tab=reconciliation&month=${nextMonth}`}
+            disabled={!isValidTargetMonth(nextMonth)}
             className="rounded border border-gray-400 bg-white px-3 py-2 font-bold"
           >
             翌月

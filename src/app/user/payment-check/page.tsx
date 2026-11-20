@@ -117,6 +117,10 @@ export default async function UserPaymentCheckPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
+      <nav aria-label="ユーザーメニュー" className="mx-auto mb-4 flex max-w-md items-center justify-between gap-4 text-sm">
+        <Link href="/user" className="underline">← ユーザー画面</Link>
+        <Link href="/account" className="underline">アカウント設定</Link>
+      </nav>
       <div className="mx-auto max-w-md">
         <section className="rounded-lg bg-white p-6 shadow">
           <h1 className="text-2xl font-bold text-gray-900">

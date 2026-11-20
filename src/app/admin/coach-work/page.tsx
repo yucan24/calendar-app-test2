@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
   getCurrentTargetMonth,
+  getTargetMonthUtcRange,
   getNextTargetMonth,
   getPrevTargetMonth,
   isValidTargetMonth,
@@ -16,10 +17,6 @@ type PageProps = {
 
 function getMonthStartDate(targetMonth: string) {
   return `${targetMonth}-01`;
-}
-
-function toUtcIsoFromDateKey(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
 }
 
 function getTodayDateKey() {
@@ -53,13 +50,13 @@ export default async function AdminCoachWorkPage({ searchParams }: PageProps) {
 
   const monthStart = getMonthStartDate(targetMonth);
   const monthEnd = getMonthStartDate(nextMonth);
+  const { startIso, endIso } = getTargetMonthUtcRange(targetMonth);
 
   const { data: coaches, error: coachesError } = await supabase
     .from("profiles")
-    .select("id, name, email")
+    .select("id, name, email, role, login_enabled, account_status")
     .eq("group_id", admin.group_id)
-    .eq("role", "admin")
-    .eq("login_enabled", true)
+    .eq("accounting_coach", true)
     .order("name", { ascending: true });
 
   if (coachesError) {
@@ -87,8 +84,8 @@ export default async function AdminCoachWorkPage({ searchParams }: PageProps) {
       "id, title, description, location, time_text, start_at, is_holiday, title_color, location_color, time_color, attendance_required, display_type"
     )
     .eq("group_id", admin.group_id)
-    .gte("start_at", toUtcIsoFromDateKey(monthStart))
-    .lt("start_at", toUtcIsoFromDateKey(monthEnd))
+    .gte("start_at", startIso)
+    .lt("start_at", endIso)
     .order("start_at", { ascending: true });
 
   if (eventsError) {
@@ -106,7 +103,7 @@ export default async function AdminCoachWorkPage({ searchParams }: PageProps) {
       prevMonth={prevMonth}
       nextMonth={nextMonth}
       todayKey={getTodayDateKey()}
-      coaches={coaches ?? []}
+      coaches={(coaches ?? []).map(coach => ({ ...coach, can_record: coach.role === "admin" && coach.login_enabled && coach.account_status === "active" }))}
       logs={logs ?? []}
       events={events ?? []}
     />

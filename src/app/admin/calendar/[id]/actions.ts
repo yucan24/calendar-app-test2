@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isValidDate } from "@/lib/month";
+import { isValidDate, getJstDateKey } from "@/lib/month";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
 
@@ -143,6 +143,13 @@ export async function deleteEvent(formData: FormData) {
     throw new Error("削除対象が不明です");
   }
 
+  const { data: event, error: eventError } = await supabase
+    .from("calendar_events").select("id,start_at")
+    .eq("id", id).eq("group_id", admin.group_id).maybeSingle();
+  if (eventError) throw new Error(eventError.message);
+  if (!event) redirect("/admin/calendar");
+  const targetMonth = getJstDateKey(event.start_at).slice(0, 7);
+
   const { error } = await supabase
     .from("calendar_events")
     .delete()
@@ -154,5 +161,5 @@ export async function deleteEvent(formData: FormData) {
   }
 
   revalidatePath("/admin/calendar");
-  redirect("/admin/calendar");
+  redirect(`/admin/calendar?month=${targetMonth}`);
 }

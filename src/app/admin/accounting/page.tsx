@@ -1,3 +1,4 @@
+import LogoutButton from "@/components/LogoutButton";
 import { fetchAllRows } from "@/lib/pagination";
 import type { ReactNode } from "react";
 import PendingNavigationButton from "@/components/PendingNavigationButton";
@@ -66,9 +67,11 @@ const accountingTabs = new Set<AccountingWorkspaceTab>([
 
 function AccountingPageFrame({
   activeTab,
+  targetMonth,
   children,
 }: {
   activeTab: AccountingWorkspaceTab;
+  targetMonth: string;
   children: ReactNode;
 }) {
   return (
@@ -91,16 +94,11 @@ function AccountingPageFrame({
             >
               管理者画面に戻る
             </PendingNavigationButton>
-            <PendingNavigationButton
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </PendingNavigationButton>
+            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
           </div>
         </div>
 
-        <AccountingWorkspaceNav activeTab={activeTab} />
+        <AccountingWorkspaceNav activeTab={activeTab} targetMonth={targetMonth} />
         <div className="mt-5">{children}</div>
       </div>
     </main>
@@ -138,7 +136,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
     activeTab === "import"
   ) {
     return (
-      <AccountingPageFrame activeTab={activeTab}>
+      <AccountingPageFrame activeTab={activeTab} targetMonth={targetMonth}>
         <BankAccountingPanel
           admin={admin}
           mode={activeTab as BankAccountingMode}
@@ -157,8 +155,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
     .from("profiles")
     .select("id, name, coach_hourly_rate")
     .eq("group_id", admin.group_id)
-    .eq("role", "admin")
-    .eq("login_enabled", true)
+    .eq("accounting_coach", true)
     .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to));
 
   if (coachesError) {
@@ -361,7 +358,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
   }
 
   return (
-    <AccountingPageFrame activeTab={activeTab}>
+    <AccountingPageFrame activeTab={activeTab} targetMonth={targetMonth}>
       <div className="space-y-6">
         <section className="mt-5 rounded-lg bg-white p-4 shadow">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -372,6 +369,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
             <div className="flex gap-2">
               <PendingNavigationButton
                 href={`/admin/accounting?tab=${activeTab}&month=${prevMonth}`}
+                disabled={!isValidTargetMonth(prevMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
@@ -384,6 +382,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
               </PendingNavigationButton>
               <PendingNavigationButton
                 href={`/admin/accounting?tab=${activeTab}&month=${nextMonth}`}
+                disabled={!isValidTargetMonth(nextMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月

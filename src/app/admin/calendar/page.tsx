@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
   getCurrentTargetMonth,
+  getTargetMonthUtcRange,
   getNextTargetMonth,
   getPrevTargetMonth,
   isValidTargetMonth,
@@ -45,10 +46,6 @@ type EventResponse = {
   note: string | null;
 };
 
-function getMonthStartDate(targetMonth: string) {
-  return `${targetMonth}-01`;
-}
-
 function getTodayDateKey() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
@@ -78,11 +75,7 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
   const prevMonth = getPrevTargetMonth(targetMonth);
   const nextMonth = getNextTargetMonth(targetMonth);
 
-  const monthStart = getMonthStartDate(targetMonth);
-  const monthEnd = getMonthStartDate(nextMonth);
-
-  const monthStartIso = new Date(`${monthStart}T00:00:00+09:00`).toISOString();
-  const monthEndIso = new Date(`${monthEnd}T00:00:00+09:00`).toISOString();
+  const { startIso: monthStartIso, endIso: monthEndIso } = getTargetMonthUtcRange(targetMonth);
 
   const { data: events, error: eventsError } = await supabase
     .from("calendar_events")

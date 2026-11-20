@@ -1,3 +1,4 @@
+import { getJstDateKey } from "@/lib/month";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -25,17 +26,6 @@ type EventResponse = {
   status: string;
   note: string | null;
 };
-
-function toDateKey(value: string | null) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
 
 function formatDate(value: string | null) {
   if (!value) return "未設定";
@@ -109,6 +99,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
     redirect("/admin/calendar");
   }
 
+  const eventDate = getJstDateKey(event.start_at);
+
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id, name, role")
@@ -132,7 +124,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
           </p>
 
           <Link
-            href="/admin/calendar"
+            href={`/admin/calendar?month=${eventDate.slice(0, 7)}&date=${eventDate}`}
             className="mt-6 inline-block rounded border bg-white px-4 py-2"
           >
             カレンダーに戻る
@@ -164,9 +156,6 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
     (response) => response.user_id === currentAdmin.id
   );
 
-  const eventDate = toDateKey(event.start_at);
-  const eventYear = new Date(event.start_at).getFullYear();
-  const eventMonth = new Date(event.start_at).getMonth() + 1;
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
@@ -180,7 +169,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
           </div>
 
           <Link
-            href={`/admin/calendar?year=${eventYear}&month=${eventMonth}&date=${eventDate}`}
+            href={`/admin/calendar?month=${eventDate.slice(0, 7)}&date=${eventDate}`}
             className="rounded border bg-white px-4 py-2 text-center"
           >
             カレンダーに戻る

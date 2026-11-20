@@ -9,6 +9,7 @@ export type AccountingWorkspaceTab =
 
 type Props = {
   activeTab: AccountingWorkspaceTab;
+  targetMonth: string;
 };
 
 const tabs: Array<{
@@ -39,7 +40,7 @@ const tabs: Array<{
   },
 ];
 
-export default function AccountingWorkspaceNav({ activeTab }: Props) {
+export default function AccountingWorkspaceNav({ activeTab, targetMonth }: Props) {
   return (
     <nav
       aria-label="会計管理メニュー"
@@ -51,7 +52,7 @@ export default function AccountingWorkspaceNav({ activeTab }: Props) {
         return (
           <Link
             key={tab.id}
-            href={tab.href}
+            href={`${tab.href}${tab.href.includes("?") ? "&" : "?"}month=${targetMonth}`}
             aria-current={selected ? "page" : undefined}
             className={`whitespace-nowrap rounded px-4 py-3 font-bold ${
               selected

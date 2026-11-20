@@ -31,20 +31,38 @@ export function getPrevTargetMonth(value: string) {
   const [year, month] = value.split("-").map(Number);
 
   if (month === 1) {
-    return `${year - 1}-12`;
+    return `${String(year - 1).padStart(4, "0")}-12`;
   }
 
-  return `${year}-${String(month - 1).padStart(2, "0")}`;
+  return `${String(year).padStart(4, "0")}-${String(month - 1).padStart(2, "0")}`;
 }
 
 export function getNextTargetMonth(value: string) {
   const [year, month] = value.split("-").map(Number);
 
   if (month === 12) {
-    return `${year + 1}-01`;
+    return `${String(year + 1).padStart(4, "0")}-01`;
   }
 
-  return `${year}-${String(month + 1).padStart(2, "0")}`;
+  return `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}`;
+}
+
+export function getJstDateKey(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find(item => item.type === type)?.value;
+  return `${part("year")?.padStart(4, "0")}-${part("month")}-${part("day")}`;
+}
+
+export function getTargetMonthUtcRange(value: string) {
+  if (!isValidTargetMonth(value)) throw new Error("対象月が不正です。");
+  const start = new Date(`${value}-01T00:00:00Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  start.setUTCHours(-9);
+  end.setUTCHours(-9);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
 export function formatYen(value: number) {

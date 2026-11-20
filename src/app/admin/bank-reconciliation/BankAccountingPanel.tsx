@@ -243,8 +243,7 @@ export default async function BankAccountingPanel({
       .from("profiles")
       .select("id, name, coach_hourly_rate")
       .eq("group_id", admin.group_id)
-      .eq("role", "admin")
-      .eq("login_enabled", true)
+      .eq("accounting_coach", true)
       .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to)),
     fetchAllRows((from, to) => supabase
       .from("coach_work_logs")

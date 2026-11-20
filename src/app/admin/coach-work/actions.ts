@@ -31,8 +31,24 @@ function parseHoursToMinutes(
   fieldName: string,
   label: string
 ) {
-  const hours = parseNonNegativeInteger(formData.get(fieldName), label);
-  return hours * 60;
+  const text = cleanText(formData.get(fieldName));
+  if (!text) return 0;
+
+  const hours = Number(text);
+  const minutes = hours * 60;
+
+  // 時間は小数を許可し、DBへ保存する分数を丸めずに検証する。
+  if (!Number.isFinite(hours) || hours < 0 || !Number.isInteger(minutes)) {
+    throw new Error(
+      `${label}は0以上で、1分単位になる時間を入力してください（例：0.25、0.5、1.5）`
+    );
+  }
+
+  if (minutes > 2_147_483_647) {
+    throw new Error(`${label}が大きすぎます`);
+  }
+
+  return minutes;
 }
 
 function getCoachIds(formData: FormData) {
@@ -59,18 +75,21 @@ function getDateKeys(formData: FormData) {
 
 async function assertCoachIdsInAdminGroup(
   coachIds: string[],
-  groupId: string
+  groupId: string,
+  allowHistorical = false
 ) {
   if (coachIds.length === 0) {
     throw new Error("対象指導者を1人以上選択してください");
   }
 
-  const { data: coaches, error } = await supabase
+  let query = supabase
     .from("profiles")
     .select("id")
     .eq("group_id", groupId)
-    .eq("role", "admin")
+    .eq("accounting_coach", true)
     .in("id", coachIds);
+  if (!allowHistorical) query = query.eq("role", "admin").eq("login_enabled", true);
+  const { data: coaches, error } = await query;
 
   if (error) {
     throw new Error(error.message);
@@ -88,7 +107,7 @@ async function assertCoachIdsInAdminGroup(
 async function assertCoachWorkLogInAdminGroup(logId: string, groupId: string) {
   const { data: log, error } = await supabase
     .from("coach_work_logs")
-    .select("id, group_id")
+    .select("id, group_id, coach_id")
     .eq("id", logId)
     .single();
 
@@ -99,6 +118,7 @@ async function assertCoachWorkLogInAdminGroup(logId: string, groupId: string) {
   if (log.group_id !== groupId) {
     throw new Error("この勤怠記録を操作する権限がありません");
   }
+  return log;
 }
 
 async function insertCoachWorkRows(input: {
@@ -208,8 +228,8 @@ export async function updateCoachWorkLog(formData: FormData) {
     throw new Error("指導日が不正です");
   }
 
-  await assertCoachWorkLogInAdminGroup(logId, admin.group_id);
-  await assertCoachIdsInAdminGroup([coachId], admin.group_id);
+  const original = await assertCoachWorkLogInAdminGroup(logId, admin.group_id);
+  await assertCoachIdsInAdminGroup([coachId], admin.group_id, original.coach_id === coachId);
 
   const coachingMinutes = parseHoursToMinutes(
     formData,

@@ -36,7 +36,14 @@ export async function endSession() {
     const { error } = await supabase.from("app_sessions").delete().eq("token_hash", tokenHash);
     if (error) throw new Error("ログアウトに失敗しました。もう一度お試しください。");
   }
-  cookieStore.delete(sessionCookieName());
+  cookieStore.set(sessionCookieName(), "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  });
   cookieStore.delete("profile_id");
 }
 

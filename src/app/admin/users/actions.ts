@@ -56,7 +56,7 @@ function buildBillingItemCategory(inputCategory: string) {
 async function assertUserInAdminGroup(userId: string, groupId: string) {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, group_id")
+    .select("id, group_id, account_status")
     .eq("id", userId)
     .single();
 
@@ -67,6 +67,7 @@ async function assertUserInAdminGroup(userId: string, groupId: string) {
   if (profile.group_id !== groupId) {
     throw new Error("このユーザーを操作する権限がありません");
   }
+  if (profile.account_status !== "active") throw new Error("利用中の会員にだけ新しい請求を追加できます。");
 }
 
 async function assertBillingItemInAdminGroup(itemId: string, groupId: string) {

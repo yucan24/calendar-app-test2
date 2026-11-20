@@ -1,5 +1,7 @@
 "use client";
 
+import LogoutButton from "@/components/LogoutButton";
+
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
@@ -14,7 +16,7 @@ import {
   updateAdminCalendarAttendance,
   updateAdminCalendarEventFromModal,
 } from "./actions";
-import { formatTargetMonth } from "@/lib/month";
+import { formatTargetMonth, isValidTargetMonth } from "@/lib/month";
 
 type Profile = {
   id: string;
@@ -1258,12 +1260,7 @@ function renderEventBlock(event: CalendarEvent) {
             >
               管理者画面に戻る
             </PendingNavigationButton>
-            <PendingNavigationButton
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </PendingNavigationButton>
+            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
           </div>
         </div>
 
@@ -1276,6 +1273,7 @@ function renderEventBlock(event: CalendarEvent) {
             <div className="flex gap-2">
               <PendingNavigationButton
                 href={`/admin/calendar?month=${prevMonth}`}
+                disabled={!isValidTargetMonth(prevMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
@@ -1288,6 +1286,7 @@ function renderEventBlock(event: CalendarEvent) {
               </PendingNavigationButton>
               <PendingNavigationButton
                 href={`/admin/calendar?month=${nextMonth}`}
+                disabled={!isValidTargetMonth(nextMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月

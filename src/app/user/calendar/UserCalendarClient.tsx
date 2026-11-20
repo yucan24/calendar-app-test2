@@ -1,5 +1,7 @@
 "use client";
 
+import LogoutButton from "@/components/LogoutButton";
+
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
@@ -8,7 +10,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SubmitButton from "@/components/SubmitButton";
 import { updateUserCalendarAttendance } from "./actions";
-import { formatTargetMonth } from "@/lib/month";
+import { formatTargetMonth, isValidTargetMonth } from "@/lib/month";
 
 type CurrentUser = {
   id: string;
@@ -996,12 +998,7 @@ function renderEventBlock(event: CalendarEvent) {
             >
               ユーザー画面に戻る
             </a>
-            <a
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </a>
+            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
           </div>
         </div>
 
@@ -1013,7 +1010,8 @@ function renderEventBlock(event: CalendarEvent) {
 
             <div className="flex gap-2">
               <a
-                href={`/user/calendar?month=${prevMonth}`}
+                href={isValidTargetMonth(prevMonth) ? `/user/calendar?month=${prevMonth}` : undefined}
+                aria-disabled={!isValidTargetMonth(prevMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
@@ -1025,7 +1023,8 @@ function renderEventBlock(event: CalendarEvent) {
                 今月
               </a>
               <a
-                href={`/user/calendar?month=${nextMonth}`}
+                href={isValidTargetMonth(nextMonth) ? `/user/calendar?month=${nextMonth}` : undefined}
+                aria-disabled={!isValidTargetMonth(nextMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月

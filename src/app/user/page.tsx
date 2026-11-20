@@ -1,3 +1,4 @@
+import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 
@@ -15,15 +16,11 @@ export default async function UserPage() {
             </p>
           </div>
 
-          <Link
-            href="/logout"
-            className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-          >
-            ログアウト
-          </Link>
+          <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
         </div>
 
         <div className="mt-8 grid gap-5">
+          <Link href="/account" className="rounded-lg bg-white p-6 shadow"><h2 className="text-2xl font-bold">アカウント設定</h2><p className="mt-3">名前・4桁コード・メールアドレスの確認と変更</p></Link>
           <Link
             href="/user/payment-check"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"

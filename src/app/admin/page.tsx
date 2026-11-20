@@ -1,5 +1,5 @@
+import LogoutButton from "@/components/LogoutButton";
 import Link from "next/link";
-import PendingNavigationButton from "@/components/PendingNavigationButton";
 import { requireAdmin } from "@/lib/auth";
 
 export default async function AdminPage() {
@@ -16,15 +16,12 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <PendingNavigationButton
-            href="/logout"
-            className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-          >
-            ログアウト
-          </PendingNavigationButton>
+          <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
         </div>
 
         <div className="mt-8 grid gap-5">
+          <Link href="/admin/members" className="rounded-lg border border-blue-200 bg-blue-50 p-6 shadow-sm"><h2 className="text-2xl font-bold text-blue-950">会員管理</h2></Link>
+          <Link href="/account" className="rounded-lg bg-white p-6 shadow"><h2 className="text-2xl font-bold">アカウント設定</h2></Link>
           <Link
             href="/admin/calendar"
             className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
@@ -69,15 +66,7 @@ export default async function AdminPage() {
             </p>
           </Link>
 
-          <Link
-            href="/admin/members"
-            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
-          >
-            <h2 className="text-2xl font-bold text-gray-900">会員管理</h2>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              会員登録の承認、登録情報編集、管理者権限、ログイン許可を管理します。
-            </p>
-          </Link>
+
 
         </div>
       </div>

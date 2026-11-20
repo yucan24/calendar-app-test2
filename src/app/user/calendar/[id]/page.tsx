@@ -1,3 +1,4 @@
+import { getJstDateKey } from "@/lib/month";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -102,8 +103,7 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
   };
 
   const myResponse = response as EventResponse | null;
-  const eventYear = new Date(event.start_at).getFullYear();
-  const eventMonth = new Date(event.start_at).getMonth() + 1;
+  const eventMonth = getJstDateKey(event.start_at).slice(0, 7);
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
@@ -117,7 +117,7 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
           </div>
 
           <Link
-            href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
+            href={`/user/calendar?month=${eventMonth}`}
             className="rounded border bg-white px-4 py-2 text-center"
           >
             カレンダーに戻る
@@ -249,7 +249,7 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
         )}
 
         <Link
-          href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
+          href={`/user/calendar?month=${eventMonth}`}
           className="mt-6 inline-block rounded border bg-white px-4 py-2"
         >
           戻る

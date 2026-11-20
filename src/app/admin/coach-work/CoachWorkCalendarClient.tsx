@@ -1,5 +1,7 @@
 "use client";
 
+import LogoutButton from "@/components/LogoutButton";
+
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
@@ -14,12 +16,13 @@ import {
   deleteCoachWorkLog,
   updateCoachWorkLog,
 } from "./actions";
-import { formatTargetMonth, formatYen } from "@/lib/month";
+import { formatTargetMonth, formatYen, isValidTargetMonth } from "@/lib/month";
 
 type Coach = {
   id: string;
   name: string;
   email: string;
+  can_record?: boolean;
 };
 
 type CoachWorkLog = {
@@ -667,7 +670,7 @@ export default function CoachWorkCalendarClient({
   function renderCoachCheckboxes() {
     return (
       <div className="mt-3 grid gap-2">
-        {coaches.map((coach) => (
+        {coaches.filter(coach => coach.can_record !== false).map((coach) => (
           <label
             key={coach.id}
             className="flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900"
@@ -880,12 +883,7 @@ export default function CoachWorkCalendarClient({
             >
               管理者画面に戻る
             </PendingNavigationButton>
-            <PendingNavigationButton
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </PendingNavigationButton>
+            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
           </div>
         </div>
 
@@ -898,6 +896,7 @@ export default function CoachWorkCalendarClient({
             <div className="flex gap-2">
               <PendingNavigationButton
                 href={`/admin/coach-work?month=${prevMonth}`}
+                disabled={!isValidTargetMonth(prevMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 前月
@@ -910,6 +909,7 @@ export default function CoachWorkCalendarClient({
               </PendingNavigationButton>
               <PendingNavigationButton
                 href={`/admin/coach-work?month=${nextMonth}`}
+                disabled={!isValidTargetMonth(nextMonth)}
                 className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
               >
                 翌月
@@ -1308,7 +1308,7 @@ export default function CoachWorkCalendarClient({
                                   defaultValue={log.coach_id}
                                   className={fieldClass}
                                 >
-                                  {coaches.map((coach) => (
+                                  {coaches.filter(coach => coach.can_record !== false || coach.id === log.coach_id).map((coach) => (
                                     <option key={coach.id} value={coach.id}>
                                       {coach.name}
                                     </option>

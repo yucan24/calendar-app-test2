@@ -30,8 +30,7 @@ export async function buildMonthlyVirtualPaymentReport(
         .from("profiles")
         .select("id, name, coach_hourly_rate")
         .eq("group_id", admin.group_id)
-        .eq("role", "admin")
-        .eq("login_enabled", true).order("id", { ascending: true }).range(from, to)),
+        .eq("accounting_coach", true).order("id", { ascending: true }).range(from, to)),
       fetchAllRows((from, to) => supabase
         .from("coach_work_logs")
         .select(
