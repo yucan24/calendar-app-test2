@@ -6,7 +6,7 @@ export default function AccountActionForm({ action, children, buttonText, danger
   const [state, submit] = useActionState(action, initialAccountState);
   return <form action={submit} className="space-y-3">
     {state.message && <p role="status" className={`rounded p-3 text-sm ${state.ok ? "bg-green-100 text-green-900" : "bg-red-100 text-red-900"}`}>{state.message}</p>}
-    {state.url && <div className="rounded border p-3"><label className="block text-sm">本人への案内用リンク<input className="mt-1 w-full rounded border p-2" readOnly value={state.url} onFocus={e => e.currentTarget.select()} /></label><p className="mt-2 text-xs">この画面を閉じると再表示できません。第三者には共有しないでください。</p></div>}
-    {!(hideOnSuccess && state.ok) && <>{children}<SubmitButton className={`rounded px-4 py-3 font-bold text-white ${danger ? "bg-red-700" : "bg-gray-900"}`}>{buttonText}</SubmitButton></>}
+    {state.url && <div className="rounded border p-3"><label className="block text-sm">本人への案内用リンク<input className="ui-field mt-1 w-full" readOnly value={state.url} onFocus={e => e.currentTarget.select()} /></label><p className="mt-2 text-xs">この画面を閉じると再表示できません。第三者には共有しないでください。</p></div>}
+    {!(hideOnSuccess && state.ok) && <>{children}<SubmitButton className={`ui-button ${danger ? "ui-button-danger" : "ui-button-primary"}`}>{buttonText}</SubmitButton></>}
   </form>;
 }

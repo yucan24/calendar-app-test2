@@ -1,3 +1,5 @@
+import LogoutButton from "@/components/LogoutButton";
+import PageHeader from "@/components/ui/PageHeader";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -16,10 +18,8 @@ export default async function AdminMembersPage() {
   const lastMail = new Map<string, MemberNotice>();
   for (const notice of (notices || []) as MemberNotice[]) if (!lastMail.has(notice.profile_id)) lastMail.set(notice.profile_id, notice);
   const testEnvironment = new URL(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname === `${TEST_SUPABASE_REF}.supabase.co`;
-  return <main className="min-h-screen bg-slate-50 p-4 text-gray-900 sm:p-8"><div className="mx-auto max-w-5xl space-y-6">
-    <header className="space-y-4"><Link href="/admin" className="text-sm font-medium text-gray-600 underline underline-offset-4">← 管理者トップ</Link>
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-bold">会員管理</h1></div><Link href="/account" className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-bold">自分のアカウント設定</Link></div>
-    </header>
+  return <main className="ui-page"><div className="mx-auto max-w-5xl space-y-6">
+    <PageHeader title="会員管理" backHref="/admin" actions={<><Link href="/account" className="ui-button ui-button-secondary">アカウント設定</Link><LogoutButton /></>} />
     <MemberManagement members={members} notices={[...lastMail.values()]} adminId={admin.id} testEnvironment={testEnvironment} testInbox={testEnvironment && process.env.EMAIL_DELIVERY_MODE === "test" ? process.env.EMAIL_TEST_TO || "" : ""} />
   </div></main>;
 }

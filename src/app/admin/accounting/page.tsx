@@ -1,7 +1,9 @@
+import MonthNavigation from "@/components/ui/MonthNavigation";
+import PageHeader from "@/components/ui/PageHeader";
 import LogoutButton from "@/components/LogoutButton";
 import { fetchAllRows } from "@/lib/pagination";
 import type { ReactNode } from "react";
-import PendingNavigationButton from "@/components/PendingNavigationButton";
+
 import {
   buildAccountingReport,
   buildCumulativeAccountingBalance,
@@ -75,28 +77,9 @@ function AccountingPageFrame({
   children: ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-              会計管理
-            </h1>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              集計、銀行CSVの取込、入出金の照合を一か所で管理します。
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <PendingNavigationButton
-              href="/admin"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              管理者画面に戻る
-            </PendingNavigationButton>
-            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
-          </div>
-        </div>
+        <PageHeader title="会計管理" backHref="/admin" actions={<LogoutButton />} />
 
         <AccountingWorkspaceNav activeTab={activeTab} targetMonth={targetMonth} />
         <div className="mt-5">{children}</div>
@@ -360,34 +343,13 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
   return (
     <AccountingPageFrame activeTab={activeTab} targetMonth={targetMonth}>
       <div className="space-y-6">
-        <section className="mt-5 rounded-lg bg-white p-4 shadow">
+        <section className="ui-card mt-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="ui-section-title text-gray-900">
               {formatTargetMonth(targetMonth)}
             </h2>
 
-            <div className="flex gap-2">
-              <PendingNavigationButton
-                href={`/admin/accounting?tab=${activeTab}&month=${prevMonth}`}
-                disabled={!isValidTargetMonth(prevMonth)}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                前月
-              </PendingNavigationButton>
-              <PendingNavigationButton
-                href={`/admin/accounting?tab=${activeTab}&month=${currentMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                今月
-              </PendingNavigationButton>
-              <PendingNavigationButton
-                href={`/admin/accounting?tab=${activeTab}&month=${nextMonth}`}
-                disabled={!isValidTargetMonth(nextMonth)}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                翌月
-              </PendingNavigationButton>
-            </div>
+            <MonthNavigation baseHref={`/admin/accounting?tab=${activeTab}`} previousMonth={prevMonth} currentMonth={currentMonth} nextMonth={nextMonth} />
           </div>
         </section>
 

@@ -13,7 +13,7 @@ type SubmitButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 export default function SubmitButton({
   children,
   pendingText = "処理中...",
-  className = "",
+  className = "ui-button ui-button-primary",
   disabled,
   busy = false,
   type,

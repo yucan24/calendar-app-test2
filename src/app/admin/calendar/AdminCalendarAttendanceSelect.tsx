@@ -47,7 +47,7 @@ export default function AdminCalendarAttendanceSelect({
         value={status}
         onChange={(event) => handleChange(event.target.value)}
         disabled={isPending}
-        className={`w-full rounded border px-2 py-1 text-[11px] ${statusClass(
+        className={`ui-field ${statusClass(
           status
         )}`}
       >

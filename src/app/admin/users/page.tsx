@@ -1,7 +1,8 @@
+import PageHeader from "@/components/ui/PageHeader";
 import LogoutButton from "@/components/LogoutButton";
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import PendingNavigationButton from "@/components/PendingNavigationButton";
+
 import SubmitButton from "@/components/SubmitButton";
 import BillingStatusButtons from "./BillingStatusButtons";
 import { accountStatusLabels } from "@/lib/accountPolicy";
@@ -45,7 +46,7 @@ type BillingItem = {
 };
 
 const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 const REFUND_TITLE = "返金";
 
@@ -174,30 +175,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   const reminderHref = buildReminderMailto(unpaidUsers);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              ユーザー・請求管理
-            </h1>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              月謝、遠征費、その他費用の未払い状況を管理します。
-            </p>
-          </div>
+        <PageHeader title="ユーザー・請求管理" backHref="/admin" actions={<LogoutButton />} />
 
-          <div className="flex gap-2">
-            <PendingNavigationButton
-              href="/admin"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              管理者画面に戻る
-            </PendingNavigationButton>
-            <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
-          </div>
-        </div>
-
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+        <section className="ui-card mt-6">
           <details>
             <summary className="cursor-pointer text-lg font-bold text-gray-900">
               月謝を一括請求
@@ -240,7 +222,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <div className="flex min-w-0 items-end">
                 <SubmitButton
                   pendingText="一括作成中..."
-                  className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                  className="ui-button ui-button-primary w-full"
                 >
                   一括作成
                 </SubmitButton>
@@ -260,10 +242,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           </details>
         </section>
 
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+        <section className="ui-card mt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">
+              <h2 className="ui-section-title text-gray-900">
                 未払い者への督促
               </h2>
               <p className="mt-1 text-sm font-medium text-gray-700">
@@ -274,14 +256,14 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             {unpaidUsers.length > 0 ? (
               <a
                 href={reminderHref}
-                className="rounded bg-orange-500 px-4 py-3 text-center font-bold text-white"
+                className="ui-button bg-orange-500 text-center text-white"
               >
                 未払い者にまとめて督促メール
               </a>
             ) : (
               <button
                 disabled
-                className="rounded bg-gray-200 px-4 py-3 font-bold text-gray-600"
+                className="ui-button ui-button-secondary"
               >
                 未払い者なし
               </button>
@@ -318,10 +300,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             );
 
             return (
-              <article key={user.id} className="rounded-lg bg-white p-5 shadow">
+              <article key={user.id} className="ui-card">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
+                    <h2 className="ui-section-title text-gray-900">
                       {user.name}
                       {user.account_status !== "active" && <span className="ml-2 text-sm">（{accountStatusLabels[user.account_status]}・履歴参照）</span>}
                     </h2>
@@ -442,7 +424,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       <div className="flex min-w-0 items-end">
                         <SubmitButton
                           pendingText="追加中・・・"
-                          className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                          className="ui-button ui-button-primary w-full"
                         >
                           追加
                         </SubmitButton>
@@ -605,7 +587,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                   </div>
 
                                   <div className="flex min-w-0 items-end">
-                                    <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                                    <SubmitButton className="ui-button ui-button-primary w-full">
                                       修正
                                     </SubmitButton>
                                   </div>

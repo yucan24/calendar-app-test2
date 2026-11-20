@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PageHeader from "@/components/ui/PageHeader";
 import { getCurrentProfile } from "@/lib/auth";
 
 const titles: Record<string, string> = {
@@ -13,8 +14,8 @@ export default async function AccountCompletePage({ searchParams }: { searchPara
   const title = Object.hasOwn(titles, kind) ? titles[kind] : "アカウント";
   const member = await getCurrentProfile();
   const returnToAccount = Boolean(member);
-  return <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8"><div className="mx-auto max-w-lg rounded-xl bg-white p-6 shadow-sm sm:p-8">
-    <h1 className="text-2xl font-bold">{title}</h1>
-    <Link href={returnToAccount ? "/account" : "/login"} className="mt-6 block rounded-lg bg-blue-700 px-4 py-3 text-center font-bold text-white">{returnToAccount ? "アカウント設定へ" : "ログインへ"}</Link>
+  return <main className="ui-page"><div className="ui-card mx-auto max-w-lg">
+    <PageHeader title={title} />
+    <Link href={returnToAccount ? "/account" : "/login"} className="ui-button ui-button-primary mt-6 block text-center">{returnToAccount ? "アカウント設定へ" : "ログインへ"}</Link>
   </div></main>;
 }

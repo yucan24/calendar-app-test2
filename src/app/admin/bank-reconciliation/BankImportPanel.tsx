@@ -22,8 +22,8 @@ function formatDateTime(value: string) {
 
 export default function BankImportPanel({ importHistory }: Props) {
   return (
-    <section className="rounded-lg bg-white p-5 shadow">
-      <h2 className="text-xl font-bold text-gray-900">CSV取込</h2>
+    <section className="ui-card">
+      <h2 className="ui-section-title text-gray-900">CSV取込</h2>
       <BankCsvImportForm />
 
       {importHistory.length > 0 && (

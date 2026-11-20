@@ -11,6 +11,7 @@ after(async () => { await db?.close(); });
 function hrefs(node, result = []) {
   if (!node || typeof node !== 'object') return result;
   if (Array.isArray(node)) { node.forEach(child => hrefs(child, result)); return result; }
+  if (typeof node.type === 'function' && ['PageHeader','MonthNavigation'].includes(node.type.name)) return hrefs(node.type(node.props), result);
   if (node.props?.href) result.push(node.props.href);
   hrefs(node.props?.children, result);
   return result;
@@ -79,6 +80,7 @@ function publicPageMocks(profile) {
     '@/lib/navigation':navigation,
     '@/components/AccountActionForm':()=>null,
     '@/components/CodeInput':()=>null,
+    '@/components/LogoutButton':()=>null,
     './FeedbackForm':()=>null,
     './RegisterForm':()=>null,
     './actions':{},
@@ -146,4 +148,15 @@ test('予定の出欠取得に失敗しても、戻る先は今月ではなく�
     '@/components/SubmitButton':()=>null, './AdminAttendanceSelect':()=>null, './actions':{},
   }).default;
   assert.deepEqual(hrefs(await page({params:Promise.resolve({id:event.id})})), ['/admin/calendar?month=2026-08&date=2026-08-01']);
+});
+
+test('共通の月送りはカレンダーと会計タブのURLを保ち、範囲外の月を無効にする', () => {
+  const MonthNavigation=loadTs('src/components/ui/MonthNavigation.tsx',{'@/components/PendingNavigationButton':()=>null,'@/lib/month':month}).default;
+  for(const baseHref of ['/user/calendar','/admin/calendar','/admin/coach-work','/admin/accounting?tab=settings','/admin/accounting?tab=reconciliation']) {
+    const nav=MonthNavigation({baseHref,previousMonth:'2026-07',currentMonth:'2026-08',nextMonth:'2026-09'});
+    assert.deepEqual(hrefs(nav).map(h=>new URL(h,'https://example.test').searchParams.get('month')),['2026-07','2026-08','2026-09']);
+    if(baseHref.includes('tab='))hrefs(nav).forEach(h=>assert.equal(new URL(h,'https://example.test').searchParams.get('tab'),new URL(baseHref,'https://example.test').searchParams.get('tab')));
+  }
+  const nav=MonthNavigation({baseHref:'/user/calendar',previousMonth:'0000-12',currentMonth:'2026-08',nextMonth:'10000-01'});
+  assert.deepEqual(nav.props.children.map(c=>Boolean(c.props.disabled)),[true,false,true]);
 });

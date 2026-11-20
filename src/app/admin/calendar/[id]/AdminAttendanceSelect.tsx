@@ -60,7 +60,7 @@ export default function AdminAttendanceSelect({
           value={status}
           onChange={(event) => handleStatusChange(event.target.value)}
           disabled={isPending}
-          className={`mt-1 w-full rounded border px-3 py-2 text-sm ${statusClass(
+          className={`ui-field mt-1 ${statusClass(
             status
           )}`}
         >
@@ -78,7 +78,7 @@ export default function AdminAttendanceSelect({
           onChange={(event) => setNote(event.target.value)}
           onBlur={handleNoteBlur}
           disabled={isPending}
-          className="mt-1 w-full rounded border px-3 py-2 text-sm"
+          className="ui-field mt-1 w-full"
           placeholder="遅刻、早退、欠席理由など"
         />
         <p className="mt-1 text-xs text-gray-500">

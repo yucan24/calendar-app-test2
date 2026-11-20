@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import Module from "node:module";
 import ts from "typescript";
@@ -11,7 +11,12 @@ export function loadTs(filename, mocks = {}) {
   compiled.filename = fullPath;
   compiled.paths = Module._nodeModulePaths(dirname(fullPath));
   const originalRequire = compiled.require.bind(compiled);
-  compiled.require = (name) => Object.hasOwn(mocks, name) ? mocks[name] : originalRequire(name);
+  compiled.require = (name) => {
+    if (Object.hasOwn(mocks, name)) return mocks[name];
+    const local = name.startsWith("@/") ? resolve("src", name.slice(2)) : name.startsWith(".") ? resolve(dirname(fullPath), name) : null;
+    if (local) for (const extension of [".ts", ".tsx"]) if (existsSync(local + extension)) return loadTs(local + extension, mocks);
+    return originalRequire(name);
+  };
   compiled._compile(ts.transpileModule(readFileSync(fullPath, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText, fullPath);

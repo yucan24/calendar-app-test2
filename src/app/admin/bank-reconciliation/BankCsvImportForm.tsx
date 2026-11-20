@@ -47,13 +47,13 @@ export default function BankCsvImportForm() {
             event.currentTarget.setCustomValidity(error);
             setFileError(error);
           }}
-          className="mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-2 file:font-bold"
+          className="ui-field mt-1 block w-full file:mr-3 file:rounded file:border-0 file:bg-gray-200 file:px-3 file:py-2 file:font-bold"
         />
         {fileError && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{fileError}</p>}
       </div>
 
       <div className="flex items-end">
-        <SubmitButton className="w-full rounded bg-black px-5 py-3 font-bold text-white sm:w-auto">
+        <SubmitButton className="ui-button ui-button-primary w-full sm:w-auto">
           取り込む
         </SubmitButton>
       </div>

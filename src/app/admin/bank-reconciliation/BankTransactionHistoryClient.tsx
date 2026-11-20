@@ -90,10 +90,10 @@ export default function BankTransactionHistoryClient({
   }
 
   return (
-    <section id="processed" className="rounded-lg bg-white p-5 shadow">
+    <section id="processed" className="ui-card">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">処理履歴</h2>
+          <h2 className="ui-section-title text-gray-900">処理履歴</h2>
           <p className="mt-1 text-sm font-medium text-gray-700">
             履歴も一件ずつ確認します。
           </p>
@@ -104,11 +104,7 @@ export default function BankTransactionHistoryClient({
             type="button"
             aria-pressed={status === "matched"}
             onClick={() => selectStatus("matched")}
-            className={`rounded px-4 py-2 font-bold ${
-              status === "matched"
-                ? "bg-gray-900 text-white"
-                : "border border-gray-400 bg-white text-gray-900"
-            }`}
+            className="ui-tab"
           >
             処理済み {matchedTransactions.length}件
           </button>
@@ -116,11 +112,7 @@ export default function BankTransactionHistoryClient({
             type="button"
             aria-pressed={status === "ignored"}
             onClick={() => selectStatus("ignored")}
-            className={`rounded px-4 py-2 font-bold ${
-              status === "ignored"
-                ? "bg-gray-900 text-white"
-                : "border border-gray-400 bg-white text-gray-900"
-            }`}
+            className="ui-tab"
           >
             対象外 {ignoredTransactions.length}件
           </button>
@@ -140,7 +132,7 @@ export default function BankTransactionHistoryClient({
             onClick={() =>
               setCurrentIndex(Math.max(0, safeCurrentIndex - 1))
             }
-            className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900 disabled:pointer-events-none disabled:opacity-40"
+            className="ui-button ui-button-secondary disabled:pointer-events-none disabled:opacity-40"
           >
             前へ
           </button>
@@ -155,7 +147,7 @@ export default function BankTransactionHistoryClient({
                 Math.min(transactions.length - 1, safeCurrentIndex + 1)
               )
             }
-            className="rounded bg-gray-900 px-4 py-2 font-bold text-white disabled:pointer-events-none disabled:opacity-40"
+            className="ui-button ui-button-primary disabled:pointer-events-none disabled:opacity-40"
           >
             次へ
           </button>
@@ -240,7 +232,7 @@ export default function BankTransactionHistoryClient({
                     name="transaction_id"
                     value={transaction.id}
                   />
-                  <SubmitButton className="rounded border border-red-300 bg-white px-4 py-2 font-bold text-red-700">
+                  <SubmitButton className="ui-button ui-button-danger">
                     紐付けを取り消す
                   </SubmitButton>
                 </form>
@@ -257,7 +249,7 @@ export default function BankTransactionHistoryClient({
                   name="transaction_id"
                   value={transaction.id}
                 />
-                <SubmitButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900">
+                <SubmitButton className="ui-button ui-button-secondary">
                   未処理に戻す
                 </SubmitButton>
               </form>

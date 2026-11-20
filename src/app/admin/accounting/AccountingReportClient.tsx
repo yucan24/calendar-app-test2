@@ -1052,14 +1052,14 @@ export default function AccountingReportClient({
                     <form action={settleCoachOffsetsWithoutTransfer} className="mt-2">
                       <input type="hidden" name="coach_id" value={row.coachId} />
                       <input type="hidden" name="target_month" value={targetMonth} />
-                      <SubmitButton className="rounded bg-gray-900 px-3 py-2 text-xs font-bold text-white">振込なしで相殺を確定</SubmitButton>
+                      <SubmitButton className="ui-button ui-button-primary">振込なしで相殺を確定</SubmitButton>
                     </form>
                   )}
                   {row.deductionItems.some((item) => item.coach_payment_offset_month && !item.coach_payment_transaction_id) && (
                     <form action={cancelCoachOffsetsWithoutTransfer} className="mt-2">
                       <input type="hidden" name="coach_id" value={row.coachId} />
                       <input type="hidden" name="target_month" value={targetMonth} />
-                      <SubmitButton className="rounded border border-red-300 px-3 py-2 text-xs font-bold text-red-700">振込なしの相殺を取り消す</SubmitButton>
+                      <SubmitButton className="ui-button ui-button-danger">振込なしの相殺を取り消す</SubmitButton>
                     </form>
                   )}
                   {row.unpaidDeductionTotal > 0 && (
@@ -1133,11 +1133,11 @@ export default function AccountingReportClient({
   }
 
   return (
-    <section className="rounded-lg bg-white p-5 shadow">
+    <section className="ui-card">
       <div className="flex flex-col gap-3 border-b border-gray-300 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-bold text-gray-600">会計報告書</p>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
+          <h2 className="ui-section-title mt-1 text-gray-900">
             {formatTargetMonth(targetMonth)}
           </h2>
           <p className="mt-2 text-sm font-medium text-gray-700">
@@ -1154,7 +1154,7 @@ export default function AccountingReportClient({
           onClick={downloadReportImage}
           disabled={isExporting}
           aria-disabled={isExporting}
-          className="rounded bg-black px-4 py-3 font-bold text-white disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="ui-button ui-button-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           共有画像を保存
         </button>

@@ -47,11 +47,7 @@ export default function AccountingSectionTabs({
                 aria-controls={`${tab.id}-panel`}
                 id={`${tab.id}-tab`}
                 onClick={() => setActiveIndex(index)}
-                className={`min-h-14 rounded border px-3 py-2 text-left transition ${
-                  selected
-                    ? "border-gray-900 bg-gray-900 text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                }`}
+                className="ui-tab flex-col items-start whitespace-normal text-left"
               >
                 <span className="block text-sm font-bold">{tab.label}</span>
                 <span

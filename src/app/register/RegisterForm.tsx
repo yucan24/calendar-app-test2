@@ -10,7 +10,7 @@ const initialState: RegisterState = {
 };
 
 const fieldClass =
-  "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 export default function RegisterForm() {
   const [state, formAction] = useActionState(registerMember, initialState);
@@ -62,7 +62,7 @@ export default function RegisterForm() {
 
       <SubmitButton
         pendingText="申請を送信中..."
-        className="w-full rounded-lg bg-blue-700 px-4 py-3 font-bold text-white hover:bg-blue-800"
+        className="ui-button ui-button-primary w-full"
       >
         登録を申請
       </SubmitButton>

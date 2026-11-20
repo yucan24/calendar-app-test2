@@ -1,61 +1,17 @@
 import LogoutButton from "@/components/LogoutButton";
-import Link from "next/link";
+import PageHeader from "@/components/ui/PageHeader";
+import MenuCard from "@/components/ui/MenuCard";
 import { requireUser } from "@/lib/auth";
 
 export default async function UserPage() {
   const profile = await requireUser();
-
-  return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
-      <div className="mx-auto max-w-md">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">ユーザー画面</h1>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              {profile.name} さんでログイン中
-            </p>
-          </div>
-
-          <LogoutButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900" />
-        </div>
-
-        <div className="mt-8 grid gap-5">
-          <Link href="/account" className="rounded-lg bg-white p-6 shadow"><h2 className="text-2xl font-bold">アカウント設定</h2><p className="mt-3">名前・4桁コード・メールアドレスの確認と変更</p></Link>
-          <Link
-            href="/user/payment-check"
-            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
-          >
-            <h2 className="text-2xl font-bold text-gray-900">
-              支払い確認
-            </h2>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              月謝、遠征費、その他費用の未払い金額と内訳を確認します。
-            </p>
-          </Link>
-
-          <Link
-            href="/user/calendar"
-            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
-          >
-            <h2 className="text-2xl font-bold text-gray-900">カレンダー</h2>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              予定確認と出欠回答を行います。
-            </p>
-          </Link>
-
-          <Link
-            href="/feedback"
-            className="rounded-lg bg-white p-6 shadow hover:bg-gray-50"
-          >
-            <h2 className="text-2xl font-bold text-gray-900">
-              開発者へのご意見
-            </h2>
-            <p className="mt-3 text-base font-medium text-gray-700">
-              不具合、操作性、追加要望を送信します。
-            </p>
-          </Link>
-        </div>
-      </div>
-    </main>
-  );
+  return <main className="ui-page"><div className="mx-auto max-w-5xl">
+    <PageHeader title="ユーザー画面" actions={<LogoutButton />}><p>{profile.name}</p></PageHeader>
+    <div className="ui-menu-grid">
+      <MenuCard href="/user/payment-check">支払い確認</MenuCard>
+      <MenuCard href="/user/calendar">カレンダー</MenuCard>
+      <MenuCard href="/account">アカウント設定</MenuCard>
+      <MenuCard href="/feedback">開発者へのご意見</MenuCard>
+    </div>
+  </div></main>;
 }

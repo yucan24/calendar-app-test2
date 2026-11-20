@@ -53,7 +53,7 @@ type TransactionActionMode =
   | "ignore";
 
 const fieldClass =
-  "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -219,7 +219,7 @@ function TransactionCard({
         ];
 
   return (
-    <article className="rounded-lg border border-gray-300 bg-white shadow-sm">
+    <article className="ui-card">
       <div className="grid gap-3 border-b border-gray-200 p-4 lg:grid-cols-[8rem_7rem_9rem_minmax(12rem,1fr)] lg:items-center">
         <div>
           <p className="text-xs font-bold text-gray-500">取引日</p>
@@ -343,11 +343,7 @@ function TransactionCard({
               role="tab"
               aria-selected={actionMode === option.value}
               onClick={() => setActionMode(option.value)}
-              className={`whitespace-nowrap rounded px-4 py-2 text-sm font-bold ${
-                actionMode === option.value
-                  ? "bg-gray-900 text-white"
-                  : "border border-gray-300 bg-white text-gray-800"
-              }`}
+              className="ui-tab"
             >
               {option.label}
             </button>
@@ -436,7 +432,7 @@ function TransactionCard({
 
             <SubmitButton
               disabled={selectedBillingIds.length === 0}
-              className="rounded bg-black px-4 py-2 font-bold text-white"
+              className="ui-button ui-button-primary"
             >
               内容を確認して確定
             </SubmitButton>
@@ -523,7 +519,7 @@ function TransactionCard({
                 <p className="text-sm font-medium text-gray-700">
                   紐付けを取り消しても、登録済みの会計項目は削除されません。
                 </p>
-                <SubmitButton className="rounded bg-black px-4 py-2 font-bold text-white">
+                <SubmitButton className="ui-button ui-button-primary">
                   既存項目へ紐付けて確定
                 </SubmitButton>
               </>
@@ -574,7 +570,7 @@ function TransactionCard({
                 </label>
                 <input name="note" className={fieldClass} />
               </div>
-              <SubmitButton className="rounded bg-black px-4 py-2 font-bold text-white sm:col-span-2 sm:w-fit">
+              <SubmitButton className="ui-button ui-button-primary sm:col-span-2 sm:w-fit">
                 {formatYen(amount)}の収入として確定
               </SubmitButton>
             </form>
@@ -628,7 +624,7 @@ function TransactionCard({
                   </label>
                   <input name="note" className={fieldClass} />
                 </div>
-                <SubmitButton className="rounded bg-black px-4 py-2 font-bold text-white sm:col-span-2 sm:w-fit">
+                <SubmitButton className="ui-button ui-button-primary sm:col-span-2 sm:w-fit">
                   {formatYen(amount)}の出費として確定
                 </SubmitButton>
               </form>
@@ -684,7 +680,7 @@ function TransactionCard({
                       className={fieldClass}
                       placeholder="備考（任意）"
                     />
-                    <SubmitButton className="rounded bg-black px-4 py-2 font-bold text-white">
+                    <SubmitButton className="ui-button ui-button-primary">
                       指導者手取りとして確定
                     </SubmitButton>
                   </>
@@ -727,7 +723,7 @@ function TransactionCard({
                       className={fieldClass}
                       placeholder="備考（任意）"
                     />
-                    <SubmitButton className="rounded bg-black px-4 py-2 font-bold text-white">
+                    <SubmitButton className="ui-button ui-button-primary">
                       納税として確定
                     </SubmitButton>
                   </>
@@ -754,7 +750,7 @@ function TransactionCard({
                 placeholder="例：システム導入前に処理済み"
               />
             </label>
-            <SubmitButton className="rounded bg-gray-900 px-4 py-2 font-bold text-white">
+            <SubmitButton className="ui-button ui-button-primary">
               処理済みにする
             </SubmitButton>
           </form>
@@ -777,7 +773,7 @@ function TransactionCard({
                 placeholder="例：口座間移動"
               />
             </label>
-            <SubmitButton className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900">
+            <SubmitButton className="ui-button ui-button-secondary">
               対象外にする
             </SubmitButton>
           </form>
@@ -816,10 +812,10 @@ export default function BankTransactionReviewClient(props: Props) {
 
   return (
     <section id="unmatched" className="space-y-4">
-      <div className="rounded-lg bg-white p-5 shadow">
+      <div className="ui-card">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">未処理明細</h2>
+            <h2 className="ui-section-title text-gray-900">未処理明細</h2>
             <p className="mt-1 text-sm font-medium text-gray-700">
               候補は参考情報です。確定ボタンを押すまで請求・会計データは更新されません。
             </p>
@@ -863,7 +859,7 @@ export default function BankTransactionReviewClient(props: Props) {
               onClick={() =>
                 setCurrentIndex(Math.max(0, safeCurrentIndex - 1))
               }
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900 disabled:pointer-events-none disabled:opacity-40"
+              className="ui-button ui-button-secondary disabled:pointer-events-none disabled:opacity-40"
             >
               前の明細
             </button>
@@ -881,7 +877,7 @@ export default function BankTransactionReviewClient(props: Props) {
                   )
                 )
               }
-              className="rounded bg-gray-900 px-4 py-2 font-bold text-white disabled:pointer-events-none disabled:opacity-40"
+              className="ui-button ui-button-primary disabled:pointer-events-none disabled:opacity-40"
             >
               次の明細
             </button>
@@ -890,7 +886,7 @@ export default function BankTransactionReviewClient(props: Props) {
       </div>
 
       {!currentTransaction ? (
-        <div className="rounded-lg bg-white p-6 text-center font-medium text-gray-700 shadow">
+        <div className="ui-card text-center font-medium text-gray-700">
           条件に合う未処理明細はありません。
         </div>
       ) : (

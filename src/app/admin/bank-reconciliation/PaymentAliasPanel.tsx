@@ -12,13 +12,13 @@ type Props = {
 };
 
 const fieldClass =
-  "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 export default function PaymentAliasPanel({ users, aliases }: Props) {
   return (
-    <section id="aliases" className="rounded-lg bg-white p-5 shadow">
+    <section id="aliases" className="ui-card">
       <div>
-        <h2 className="text-xl font-bold text-gray-900">口座名義設定</h2>
+        <h2 className="ui-section-title text-gray-900">口座名義設定</h2>
         <p className="mt-1 text-sm font-medium text-gray-700">
           保護者名義やカタカナ表記など、摘要に現れる振込名義をユーザーへ登録します。
         </p>
@@ -64,7 +64,7 @@ export default function PaymentAliasPanel({ users, aliases }: Props) {
         </div>
 
         <div className="flex items-end">
-          <SubmitButton className="w-full rounded bg-black px-4 py-2 font-bold text-white">
+          <SubmitButton className="ui-button ui-button-primary w-full">
             名義を追加
           </SubmitButton>
         </div>
@@ -115,7 +115,7 @@ export default function PaymentAliasPanel({ users, aliases }: Props) {
                     />
                   </div>
                   <div className="flex items-end">
-                    <SubmitButton className="rounded bg-gray-900 px-4 py-2 font-bold text-white">
+                    <SubmitButton className="ui-button ui-button-primary">
                       更新
                     </SubmitButton>
                   </div>
@@ -123,7 +123,7 @@ export default function PaymentAliasPanel({ users, aliases }: Props) {
 
                 <form action={deletePaymentAlias} className="flex items-end">
                   <input type="hidden" name="alias_id" value={alias.id} />
-                  <SubmitButton className="rounded border border-red-300 bg-red-50 px-4 py-2 font-bold text-red-700">
+                  <SubmitButton className="ui-button ui-button-danger">
                     削除
                   </SubmitButton>
                 </form>

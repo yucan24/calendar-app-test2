@@ -36,7 +36,7 @@ type Props = {
 };
 
 const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 const summaryClass =
   "flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-gray-900 [&::-webkit-details-marker]:hidden";
@@ -95,9 +95,9 @@ export default function AccountingManagementPanel({
 }: Props) {
   return (
     <div className="space-y-5">
-      <section className="rounded-lg border border-gray-300 bg-white shadow-sm">
+      <section className="ui-card">
         <div className="flex flex-col gap-2 border-b border-gray-300 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-gray-900">報酬調整</h2>
+          <h2 className="ui-section-title text-gray-900">報酬調整</h2>
           <div className="flex flex-wrap gap-2 text-xs font-bold">
             <span className="rounded bg-gray-100 px-2 py-1 text-gray-800">
               報酬調整 {rewardAdjustmentList.length}件
@@ -168,7 +168,7 @@ export default function AccountingManagementPanel({
                 <input name="note" className={fieldClass} />
               </div>
 
-              <SubmitButton className="rounded bg-black px-4 py-3 font-bold text-white">
+              <SubmitButton className="ui-button ui-button-primary">
                 追加
               </SubmitButton>
             </form>
@@ -176,9 +176,9 @@ export default function AccountingManagementPanel({
         </div>
       </section>
 
-      <section className="rounded-lg border border-gray-300 bg-white shadow-sm">
+      <section className="ui-card">
         <div className="flex flex-col gap-2 border-b border-gray-300 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-gray-900">設定・記録</h2>
+          <h2 className="ui-section-title text-gray-900">設定・記録</h2>
           <div className="flex flex-wrap gap-2 text-xs font-bold">
             <span className="rounded bg-gray-100 px-2 py-1 text-gray-800">
               指導者 {coachList.length}名
@@ -269,7 +269,7 @@ export default function AccountingManagementPanel({
                     />
                   </div>
 
-                  <SubmitButton className="rounded bg-black px-3 py-2 font-bold text-white">
+                  <SubmitButton className="ui-button ui-button-primary">
                     保存
                   </SubmitButton>
                 </form>
@@ -405,7 +405,7 @@ export default function AccountingManagementPanel({
                       </div>
 
                       <div className="sm:col-span-2">
-                        <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                        <SubmitButton className="ui-button ui-button-primary w-full">
                           修正
                         </SubmitButton>
                       </div>
@@ -557,7 +557,7 @@ export default function AccountingManagementPanel({
                           </div>
 
                           <div className="sm:col-span-2">
-                            <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                            <SubmitButton className="ui-button ui-button-primary w-full">
                               修正
                             </SubmitButton>
                           </div>
@@ -709,7 +709,7 @@ export default function AccountingManagementPanel({
                           </div>
 
                           <div className="sm:col-span-2">
-                            <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                            <SubmitButton className="ui-button ui-button-primary w-full">
                               修正
                             </SubmitButton>
                           </div>

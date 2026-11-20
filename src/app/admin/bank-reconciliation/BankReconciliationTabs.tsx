@@ -53,7 +53,7 @@ export default function BankReconciliationTabs({
       <div
         role="tablist"
         aria-label="銀行明細照合メニュー"
-        className="flex gap-2 overflow-x-auto rounded-lg border border-gray-300 bg-white p-2 shadow-sm"
+        className="ui-tabs mt-6"
       >
         {tabs.map((tab) => (
           <button
@@ -62,11 +62,7 @@ export default function BankReconciliationTabs({
             role="tab"
             aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`whitespace-nowrap rounded px-4 py-3 font-bold ${
-              activeTab === tab.id
-                ? "bg-gray-900 text-white"
-                : "bg-white text-gray-800 hover:bg-gray-100"
-            }`}
+            className="ui-tab"
           >
             {tab.label}
             {typeof tab.count === "number" && ` ${tab.count}件`}

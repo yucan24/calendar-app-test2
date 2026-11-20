@@ -44,7 +44,7 @@ export default function AccountingWorkspaceNav({ activeTab, targetMonth }: Props
   return (
     <nav
       aria-label="会計管理メニュー"
-      className="mt-6 flex gap-2 overflow-x-auto rounded-lg border border-gray-300 bg-white p-2 shadow-sm"
+      className="ui-tabs mt-6"
     >
       {tabs.map((tab) => {
         const selected = tab.id === activeTab;
@@ -54,11 +54,7 @@ export default function AccountingWorkspaceNav({ activeTab, targetMonth }: Props
             key={tab.id}
             href={`${tab.href}${tab.href.includes("?") ? "&" : "?"}month=${targetMonth}`}
             aria-current={selected ? "page" : undefined}
-            className={`whitespace-nowrap rounded px-4 py-3 font-bold ${
-              selected
-                ? "bg-gray-900 text-white"
-                : "bg-white text-gray-800 hover:bg-gray-100"
-            }`}
+            className="ui-tab"
           >
             {tab.label}
           </Link>

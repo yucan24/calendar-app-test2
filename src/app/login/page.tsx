@@ -6,6 +6,7 @@ import { getMenuPath } from "@/lib/navigation";
 import { sessionCookieName, SESSION_MAX_AGE } from "@/lib/session";
 import SubmitButton from "@/components/SubmitButton";
 import CodeInput from "@/components/CodeInput";
+import PageHeader from "@/components/ui/PageHeader";
 
 
 type PageProps = {
@@ -70,9 +71,9 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const message = errorMessage(resolvedSearchParams?.error);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
-      <div className="mx-auto max-w-md">
-        <h1 className="text-3xl font-bold text-gray-900">ログイン</h1>
+    <main className="ui-page">
+      <div className="mx-auto max-w-lg">
+        <PageHeader title="ログイン" />
         {resolvedSearchParams?.message === "account-changed" && <p className="mt-4 rounded bg-green-100 p-3">ログイン情報を変更しました</p>}
 
         {message && (
@@ -81,23 +82,23 @@ export default async function LoginPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        <section aria-labelledby="new-member-heading" className="mt-6 rounded-xl border-2 border-blue-200 bg-blue-50 p-5">
-          <h2 id="new-member-heading" className="text-lg font-bold text-blue-950">はじめて利用する方</h2>
-          <a href="/register" className="mt-4 block rounded-lg bg-blue-700 px-4 py-3 text-center font-bold text-white hover:bg-blue-800">新規登録</a>
+        <section aria-labelledby="new-member-heading" className="ui-card mt-6">
+          <h2 id="new-member-heading" className="ui-section-title text-blue-950">はじめて利用する方</h2>
+          <a href="/register" className="ui-button ui-button-primary mt-4 block text-center">新規登録</a>
         </section>
 
         <form
           action={login}
-          className="mt-6 space-y-5 rounded-lg bg-white p-6 shadow"
+          className="ui-card mt-6 space-y-5"
         >
-          <h2 className="text-lg font-bold">登録済みの方はこちら</h2>
+          <h2 className="ui-section-title">登録済みの方はこちら</h2>
           <div>
             <label htmlFor="login-name" className="block text-sm font-bold text-gray-900">名前</label>
             <input
               id="login-name"
               name="name"
               required
-              className="mt-1 w-full rounded border border-gray-400 bg-white px-3 py-3 text-base text-gray-900 placeholder:text-gray-500"
+              className="ui-field mt-1 w-full placeholder:text-gray-500"
               placeholder="例：山田太郎"
             />
           </div>
@@ -106,7 +107,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <a href="/login/forgot-password" className="block text-sm underline">4桁コードを忘れた場合</a>
           <SubmitButton
             pendingText="ログイン中..."
-            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white"
+            className="ui-button ui-button-primary w-full"
           >
             ログイン
           </SubmitButton>

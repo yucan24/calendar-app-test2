@@ -16,7 +16,7 @@ type PendingNavigationButtonProps = {
 export default function PendingNavigationButton({
   href,
   children,
-  className = "",
+  className = "ui-button ui-button-secondary",
   disabled = false,
   replace = false,
   scroll,
