@@ -1,16 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-  buildAccountingReport,
-  type AccountingBillingItem,
-  type AccountingCoach,
-  type AccountingCoachWorkLog,
-  type AccountingRewardAdjustment,
-} from "@/lib/accounting";
-import { requireAdmin, type CurrentProfile } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { normalizeBankText, parseBankCsv } from "@/lib/bankReconciliation";
-import { getNextTargetMonth, isValidTargetMonth } from "@/lib/month";
+import { buildMonthlyVirtualPaymentReport } from "./paymentReport";
 import { supabase } from "@/lib/supabase";
 
 export type BankCsvImportState = {
@@ -18,6 +11,7 @@ export type BankCsvImportState = {
   message: string;
   importedCount: number;
   skippedCount: number;
+  conflictCount?: number;
 };
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -146,14 +140,17 @@ export async function importBankCsv(
     const result = Array.isArray(data) ? data[0] : data;
     const importedCount = Number(result?.imported_count ?? 0);
     const skippedCount = Number(result?.skipped_count ?? 0);
+    const conflictCount = Number(result?.conflict_count ?? 0);
+    const conflictIds: string[] = result?.conflict_transaction_ids ?? [];
 
     revalidateBankPages();
 
     return {
       ok: true,
-      message: `CSVを取り込みました（新規${importedCount}件・重複${skippedCount}件）`,
+      message: `CSVを取り込みました（新規${importedCount}件・重複${skippedCount}件）${conflictCount > 0 ? `。同じ口座・取引番号で内容が異なる明細が${conflictCount}件あります。既存データは変更していません。取引番号：${conflictIds.join("、")}${conflictCount > conflictIds.length ? " ほか" : ""}` : ""}`,
       importedCount,
       skippedCount,
+      conflictCount,
     };
   } catch (error) {
     return {
@@ -333,58 +330,6 @@ export async function matchTransactionToExistingAccountingItem(
   revalidateMoneyPages();
 }
 
-async function buildMonthlyVirtualPaymentReport(
-  admin: CurrentProfile,
-  targetMonth: string
-) {
-  if (!isValidTargetMonth(targetMonth)) {
-    throw new Error("対象月が不正です");
-  }
-
-  const monthStart = `${targetMonth}-01`;
-  const monthEnd = `${getNextTargetMonth(targetMonth)}-01`;
-  const [coachesResult, logsResult, billingResult, adjustmentsResult] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, name, coach_hourly_rate")
-        .eq("group_id", admin.group_id)
-        .eq("role", "admin")
-        .eq("login_enabled", true),
-      supabase
-        .from("coach_work_logs")
-        .select(
-          "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
-        )
-        .eq("group_id", admin.group_id)
-        .gte("work_date", monthStart)
-        .lt("work_date", monthEnd),
-      supabase
-        .from("billing_items")
-        .select("id, user_id, target_month, category, title, amount, status, note")
-        .eq("group_id", admin.group_id)
-        .eq("target_month", targetMonth)
-        .gt("amount", 0),
-      supabase.rpc("list_coach_reward_adjustments", {
-        p_admin_profile_id: admin.id,
-        p_target_month: targetMonth,
-      }),
-    ]);
-
-  throwRpcError(coachesResult.error);
-  throwRpcError(logsResult.error);
-  throwRpcError(billingResult.error);
-  throwRpcError(adjustmentsResult.error);
-
-  return buildAccountingReport({
-    coaches: (coachesResult.data ?? []) as AccountingCoach[],
-    logs: (logsResult.data ?? []) as AccountingCoachWorkLog[],
-    billingItems: (billingResult.data ?? []) as AccountingBillingItem[],
-    rewardAdjustments:
-      (adjustmentsResult.data ?? []) as AccountingRewardAdjustment[],
-  });
-}
-
 export async function matchTransactionToCoachNetPay(formData: FormData) {
   const admin = await requireAdmin();
   const transactionId = requireId(formData.get("transaction_id"), "銀行明細ID");
@@ -399,14 +344,15 @@ export async function matchTransactionToCoachNetPay(formData: FormData) {
   }
 
   const { error } = await supabase.rpc(
-    "match_bank_transaction_virtual_payment",
+    "match_bank_transaction_coach_payment",
     {
       p_admin_profile_id: admin.id,
       p_transaction_id: transactionId,
-      p_match_type: "coach_net_pay",
       p_profile_id: coachId,
       p_target_month: targetMonth,
       p_expected_amount: coachRow.netPay,
+      p_billing_item_ids: coachRow.deductionItems.filter((item) => item.status === "unpaid").map((item) => item.id),
+      p_complete: formData.get("complete_payment") === "on",
       p_note: note,
     }
   );

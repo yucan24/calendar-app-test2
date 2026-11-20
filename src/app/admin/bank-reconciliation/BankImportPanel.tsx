@@ -57,6 +57,7 @@ export default function BankImportPanel({ importHistory }: Props) {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 font-bold">
                       新規{item.importedCount}件・重複{item.skippedCount}件
+                      {item.conflictCount > 0 && <span className="ml-2 text-amber-800">内容相違{item.conflictCount}件（要確認）</span>}
                     </td>
                   </tr>
                 ))}

@@ -29,6 +29,7 @@ export type BankTransactionMatch = {
   amount: number;
   expectedAmount?: number | null;
   ownsTarget?: boolean;
+  settlesPayment?: boolean;
   note: string | null;
   createdAt: string;
 };
@@ -36,6 +37,7 @@ export type BankTransactionMatch = {
 export type BankTransaction = {
   id: string;
   bankTransactionId: string;
+  accountLabel?: string;
   transactedOn: string;
   withdrawalAmount: number;
   depositAmount: number;
@@ -62,6 +64,9 @@ export type CoachPaymentCandidate = {
   coachId: string;
   coachName: string;
   amount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  deductionTotal: number;
 };
 
 export type ExistingAccountingItem = {
@@ -86,5 +91,6 @@ export type BankCsvImport = {
   periodEnd: string | null;
   importedCount: number;
   skippedCount: number;
+  conflictCount: number;
   createdAt: string;
 };

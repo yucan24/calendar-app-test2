@@ -1,3 +1,4 @@
+import { fetchAllRows } from "@/lib/pagination";
 import {
   buildAccountingReport,
   type AccountingBillingItem,
@@ -46,6 +47,7 @@ type RawAlias = {
 type RawTransaction = {
   id: string;
   bank_transaction_id: string;
+  account_label: string;
   transacted_on: string;
   withdrawal_amount: number;
   deposit_amount: number;
@@ -68,6 +70,7 @@ type RawImport = {
   period_end: string | null;
   imported_count: number;
   skipped_count: number;
+  conflict_count: number;
   created_at: string;
 };
 
@@ -80,7 +83,11 @@ type RawBillingItem = {
   amount: number;
   status: string;
   note: string | null;
+  coach_payment_transaction_id: string | null;
+  coach_payment_offset_month: string | null;
 };
+
+type RawPaymentTotal = { match_type: string; profile_id: string | null; amount: number; settled: boolean };
 
 type RawExistingAccountingItem = {
   item_type: "income" | "expense";
@@ -102,6 +109,7 @@ function mapTransaction(row: RawTransaction): BankTransaction {
   return {
     id: row.id,
     bankTransactionId: row.bank_transaction_id,
+    accountLabel: row.account_label,
     transactedOn: row.transacted_on,
     withdrawalAmount: row.withdrawal_amount,
     depositAmount: row.deposit_amount,
@@ -132,18 +140,18 @@ export default async function BankAccountingPanel({
 }: Props) {
   if (mode === "history") {
     const [matchedResult, ignoredResult] = await Promise.all([
-      supabase.rpc("list_bank_transactions", {
+      fetchAllRows((from, to) => supabase.rpc("list_bank_transactions", {
         p_admin_profile_id: admin.id,
         p_status: "matched",
         p_from_date: null,
         p_to_date: null,
-      }),
-      supabase.rpc("list_bank_transactions", {
+      }).order("transacted_on", { ascending: false }).order("id", { ascending: true }).range(from, to)),
+      fetchAllRows((from, to) => supabase.rpc("list_bank_transactions", {
         p_admin_profile_id: admin.id,
         p_status: "ignored",
         p_from_date: null,
         p_to_date: null,
-      }),
+      }).order("transacted_on", { ascending: false }).order("id", { ascending: true }).range(from, to)),
     ]);
 
     throwFirstError(
@@ -186,6 +194,7 @@ export default async function BankAccountingPanel({
         periodEnd: row.period_end,
         importedCount: row.imported_count,
         skippedCount: row.skipped_count,
+        conflictCount: row.conflict_count,
         createdAt: row.created_at,
       })
     );
@@ -207,50 +216,55 @@ export default async function BankAccountingPanel({
     logsResult,
     adjustmentsResult,
     existingAccountingItemsResult,
+    paymentTotalsResult,
   ] = await Promise.all([
-    supabase
+    fetchAllRows((from, to) => supabase
       .from("profiles")
       .select("id, name, role, login_enabled")
       .eq("group_id", admin.group_id)
-      .order("name", { ascending: true }),
-    supabase.rpc("list_profile_payment_aliases", {
+      .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("list_profile_payment_aliases", {
       p_admin_profile_id: admin.id,
-    }),
-    supabase.rpc("list_bank_transactions", {
+    }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("list_bank_transactions", {
       p_admin_profile_id: admin.id,
       p_status: "unmatched",
       p_from_date: null,
       p_to_date: null,
-    }),
-    supabase
+    }).order("transacted_on", { ascending: false }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase
       .from("billing_items")
-      .select("id, user_id, target_month, category, title, amount, status, note")
+      .select("id, user_id, target_month, category, title, amount, status, note, coach_payment_transaction_id, coach_payment_offset_month")
       .eq("group_id", admin.group_id)
-      .eq("status", "unpaid")
+      .or("status.eq.unpaid,coach_payment_offset_month.not.is.null")
       .gt("amount", 0)
-      .order("target_month", { ascending: false }),
-    supabase
+      .order("target_month", { ascending: false }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase
       .from("profiles")
       .select("id, name, coach_hourly_rate")
       .eq("group_id", admin.group_id)
       .eq("role", "admin")
       .eq("login_enabled", true)
-      .order("name", { ascending: true }),
-    supabase
+      .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase
       .from("coach_work_logs")
       .select(
         "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
       )
       .eq("group_id", admin.group_id)
       .gte("work_date", monthStart)
-      .lt("work_date", monthEnd),
-    supabase.rpc("list_coach_reward_adjustments", {
+      .lt("work_date", monthEnd).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("list_coach_reward_adjustments", {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
-    }),
-    supabase.rpc("list_unlinked_accounting_items", {
+    }).order("starts_on", { ascending: false }).order("id", { ascending: true }).range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("list_unlinked_accounting_items", {
       p_admin_profile_id: admin.id,
-    }),
+    }).order("item_type").order("item_id").range(from, to)),
+    fetchAllRows((from, to) => supabase.rpc("list_bank_payment_totals", {
+      p_admin_profile_id: admin.id,
+      p_target_month: targetMonth,
+    }).order("match_type").order("profile_id").range(from, to)),
   ]);
 
   throwFirstError(
@@ -263,11 +277,14 @@ export default async function BankAccountingPanel({
       logsResult.error,
       adjustmentsResult.error,
       existingAccountingItemsResult.error,
+      paymentTotalsResult.error,
     ],
     "銀行明細照合データの取得に失敗しました"
   );
 
   const profiles = (profilesResult.data ?? []) as RawProfile[];
+  const paymentTotals = (paymentTotalsResult.data ?? []) as RawPaymentTotal[];
+  const taxPaidAmount = Number(paymentTotals.find((item) => item.match_type === "tax_payment")?.amount ?? 0);
   const profileNameById = new Map(
     profiles.map((profile) => [profile.id, profile.name])
   );
@@ -349,13 +366,20 @@ export default async function BankAccountingPanel({
         billingItems={billingItems}
         existingAccountingItems={existingAccountingItems}
         coachPayments={report.rows
-          .filter((row) => row.netPay > 0)
-          .map((row) => ({
-            coachId: row.coachId,
-            coachName: row.coachName,
-            amount: row.netPay,
-          }))}
+          .filter((row) => row.netPay > 0 && !paymentTotals.some((item) => item.profile_id === row.coachId && item.settled))
+          .map((row) => {
+            const paidAmount = Number(paymentTotals.find((item) => item.profile_id === row.coachId)?.amount ?? 0);
+            return {
+              coachId: row.coachId,
+              coachName: row.coachName,
+              amount: row.netPay,
+              paidAmount,
+              remainingAmount: Math.max(0, row.netPay - paidAmount),
+              deductionTotal: row.pendingDeductionTotal,
+            };
+          })}
         taxPaymentAmount={report.totals.withholdingTaxTotal}
+        taxPaidAmount={taxPaidAmount}
         targetMonth={targetMonth}
       />
     </div>

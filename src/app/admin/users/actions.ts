@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
+import { isValidTargetMonth } from "@/lib/month";
 
 const VALID_CATEGORIES = [
   "tuition",
@@ -17,10 +18,6 @@ const REFUND_TITLE = "返金";
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
-}
-
-function isValidTargetMonth(value: string) {
-  return /^\d{4}-\d{2}$/.test(value);
 }
 
 function parseAmount(value: FormDataEntryValue | null) {
@@ -75,7 +72,7 @@ async function assertUserInAdminGroup(userId: string, groupId: string) {
 async function assertBillingItemInAdminGroup(itemId: string, groupId: string) {
   const { data: item, error } = await supabase
     .from("billing_items")
-    .select("id, group_id")
+    .select("id, group_id, coach_payment_offset_month")
     .eq("id", itemId)
     .single();
 
@@ -85,6 +82,9 @@ async function assertBillingItemInAdminGroup(itemId: string, groupId: string) {
 
   if (item.group_id !== groupId) {
     throw new Error("この請求項目を操作する権限がありません");
+  }
+  if (item.coach_payment_offset_month) {
+    throw new Error("報酬で相殺済みの請求です。先に会計画面で相殺・銀行照合を取り消してください");
   }
 }
 
@@ -132,6 +132,7 @@ export async function createBillingItem(formData: FormData) {
 
   revalidatePath("/admin/users");
   revalidatePath("/user/payment-check");
+  revalidatePath("/admin/accounting");
 }
 
 export async function createTuitionForAllUsers(formData: FormData) {
@@ -204,6 +205,7 @@ export async function createTuitionForAllUsers(formData: FormData) {
 
   revalidatePath("/admin/users");
   revalidatePath("/user/payment-check");
+  revalidatePath("/admin/accounting");
 }
 
 export async function updateBillingItem(formData: FormData) {
@@ -249,6 +251,7 @@ export async function updateBillingItem(formData: FormData) {
 
   revalidatePath("/admin/users");
   revalidatePath("/user/payment-check");
+  revalidatePath("/admin/accounting");
 }
 
 export async function updateBillingItemStatus(formData: FormData) {
@@ -283,4 +286,5 @@ export async function updateBillingItemStatus(formData: FormData) {
 
   revalidatePath("/admin/users");
   revalidatePath("/user/payment-check");
+  revalidatePath("/admin/accounting");
 }

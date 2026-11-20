@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireUser } from "@/lib/auth";
 import SubmitButton from "@/components/SubmitButton";
+import { submitResponse } from "./actions";
 
 type PageProps = {
   params: Promise<{
@@ -40,57 +40,6 @@ function statusClass(status: string | null | undefined) {
   if (status === "absent") return "bg-red-100 text-red-800";
   if (status === "pending") return "bg-yellow-100 text-yellow-800";
   return "bg-gray-100 text-gray-600";
-}
-
-async function submitResponse(formData: FormData) {
-  "use server";
-
-  const eventId = String(formData.get("event_id"));
-  const userId = String(formData.get("user_id"));
-  const status = String(formData.get("status") ?? "");
-  const note = String(formData.get("note") ?? "");
-
-  if (!eventId || !userId) {
-    throw new Error("必須項目が不足しています");
-  }
-
-  // 未回答に戻す場合は、回答レコードを削除する
-  if (!status) {
-    const { error } = await supabase
-      .from("event_responses")
-      .delete()
-      .eq("event_id", eventId)
-      .eq("user_id", userId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    revalidatePath(`/user/calendar/${eventId}`);
-    revalidatePath("/user/calendar");
-    redirect(`/user/calendar/${eventId}`);
-  }
-
-  const { error } = await supabase.from("event_responses").upsert(
-    {
-      event_id: eventId,
-      user_id: userId,
-      status,
-      note,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "event_id,user_id",
-    }
-  );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath(`/user/calendar/${eventId}`);
-  revalidatePath("/user/calendar");
-  redirect(`/user/calendar/${eventId}`);
 }
 
 export default async function UserCalendarDetailPage({ params }: PageProps) {
@@ -267,7 +216,6 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
 
             <form action={submitResponse} className="mt-4 space-y-4">
               <input type="hidden" name="event_id" value={event.id} />
-              <input type="hidden" name="user_id" value={currentUser.id} />
 
               <div>
                 <label className="block text-sm font-medium">出欠</label>

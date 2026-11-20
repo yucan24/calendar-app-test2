@@ -1,7 +1,9 @@
+import { fetchAllRows } from "@/lib/pagination";
 import type { ReactNode } from "react";
 import PendingNavigationButton from "@/components/PendingNavigationButton";
 import {
   buildAccountingReport,
+  buildCumulativeAccountingBalance,
   type AccountingBillingItem,
   type AccountingCoach,
   type AccountingCoachWorkLog,
@@ -151,115 +153,115 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
   const monthStart = getMonthStartDate(targetMonth);
   const monthEnd = getMonthStartDate(nextMonth);
 
-  const { data: coaches, error: coachesError } = await supabase
+  const { data: coaches, error: coachesError } = await fetchAllRows((from, to) => supabase
     .from("profiles")
     .select("id, name, coach_hourly_rate")
     .eq("group_id", admin.group_id)
     .eq("role", "admin")
     .eq("login_enabled", true)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to));
 
   if (coachesError) {
     throw new Error(coachesError.message);
   }
 
-  const { data: logs, error: logsError } = await supabase
+  const { data: logs, error: logsError } = await fetchAllRows((from, to) => supabase
     .from("coach_work_logs")
     .select(
       "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
     )
     .eq("group_id", admin.group_id)
     .gte("work_date", monthStart)
-    .lt("work_date", monthEnd);
+    .lt("work_date", monthEnd).order("id", { ascending: true }).range(from, to));
 
   if (logsError) {
     throw new Error(logsError.message);
   }
 
-  const { data: billingItems, error: billingError } = await supabase
+  const { data: billingItems, error: billingError } = await fetchAllRows((from, to) => supabase
     .from("billing_items")
-    .select("id, user_id, target_month, category, title, amount, status, note")
+    .select("id, user_id, target_month, category, title, amount, status, note, coach_payment_transaction_id, coach_payment_offset_month")
     .eq("group_id", admin.group_id)
     .eq("target_month", targetMonth)
-    .gt("amount", 0);
+    .gt("amount", 0).order("id", { ascending: true }).range(from, to));
 
   if (billingError) {
     throw new Error(billingError.message);
   }
 
-  const { data: incomeItems, error: incomeError } = await supabase.rpc(
+  const { data: incomeItems, error: incomeError } = await fetchAllRows((from, to) => supabase.rpc(
     "list_accounting_income_items",
     {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
     }
-  );
+  ).order("received_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (incomeError) {
     throw new Error(incomeError.message);
   }
 
-  const { data: expenseItems, error: expenseError } = await supabase.rpc(
+  const { data: expenseItems, error: expenseError } = await fetchAllRows((from, to) => supabase.rpc(
     "list_accounting_expense_items",
     {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
     }
-  );
+  ).order("spent_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (expenseError) {
     throw new Error(expenseError.message);
   }
 
   const { data: rewardAdjustments, error: rewardAdjustmentError } =
-    await supabase.rpc("list_coach_reward_adjustments", {
+    await fetchAllRows((from, to) => supabase.rpc("list_coach_reward_adjustments", {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
-    });
+    }).order("starts_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (rewardAdjustmentError) {
     throw new Error(rewardAdjustmentError.message);
   }
 
-  const { data: cumulativeLogs, error: cumulativeLogsError } = await supabase
+  const { data: cumulativeLogs, error: cumulativeLogsError } = await fetchAllRows((from, to) => supabase
     .from("coach_work_logs")
     .select(
       "coach_id, work_date, coaching_minutes, admin_minutes, travel_expense, other_expense"
     )
     .eq("group_id", admin.group_id)
-    .lt("work_date", monthEnd);
+    .lt("work_date", monthEnd).order("id", { ascending: true }).range(from, to));
 
   if (cumulativeLogsError) {
     throw new Error(cumulativeLogsError.message);
   }
 
   const { data: cumulativeBillingItems, error: cumulativeBillingError } =
-    await supabase
+    await fetchAllRows((from, to) => supabase
       .from("billing_items")
-      .select("id, user_id, target_month, category, title, amount, status, note")
+      .select("id, user_id, target_month, category, title, amount, status, note, coach_payment_transaction_id, coach_payment_offset_month")
       .eq("group_id", admin.group_id)
       .lte("target_month", targetMonth)
-      .gt("amount", 0);
+      .gt("amount", 0).order("id", { ascending: true }).range(from, to));
 
   if (cumulativeBillingError) {
     throw new Error(cumulativeBillingError.message);
   }
 
   const { data: cumulativeIncomeItems, error: cumulativeIncomeError } =
-    await supabase.rpc("list_accounting_income_items_until", {
+    await fetchAllRows((from, to) => supabase.rpc("list_accounting_income_items_until", {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
-    });
+    }).order("received_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (cumulativeIncomeError) {
     throw new Error(cumulativeIncomeError.message);
   }
 
   const { data: cumulativeExpenseItems, error: cumulativeExpenseError } =
-    await supabase.rpc("list_accounting_expense_items_until", {
+    await fetchAllRows((from, to) => supabase.rpc("list_accounting_expense_items_until", {
       p_admin_profile_id: admin.id,
       p_target_month: targetMonth,
-    });
+    }).order("spent_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (cumulativeExpenseError) {
     throw new Error(cumulativeExpenseError.message);
@@ -268,10 +270,10 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
   const {
     data: cumulativeRewardAdjustments,
     error: cumulativeRewardAdjustmentError,
-  } = await supabase.rpc("list_coach_reward_adjustments_until", {
+  } = await fetchAllRows((from, to) => supabase.rpc("list_coach_reward_adjustments_until", {
     p_admin_profile_id: admin.id,
     p_target_month: targetMonth,
-  });
+  }).order("starts_on", { ascending: false }).order("id", { ascending: true }).range(from, to));
 
   if (cumulativeRewardAdjustmentError) {
     throw new Error(cumulativeRewardAdjustmentError.message);
@@ -290,7 +292,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
     expenseItems: expenseList,
     rewardAdjustments: rewardAdjustmentList,
   });
-  const cumulativeReport = buildAccountingReport({
+  const cumulativeBalance = buildCumulativeAccountingBalance({
     coaches: coachList,
     logs: (cumulativeLogs ?? []) as AccountingCoachWorkLog[],
     billingItems: (cumulativeBillingItems ?? []) as AccountingBillingItem[],
@@ -313,19 +315,19 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
 
   if (activeTab === "settings") {
     const [profilesResult, aliasesResult, bankLinksResult] = await Promise.all([
-      supabase
+      fetchAllRows((from, to) => supabase
         .from("profiles")
         .select("id, name")
         .eq("group_id", admin.group_id)
         .eq("role", "user")
         .eq("login_enabled", true)
-        .order("name", { ascending: true }),
-      supabase.rpc("list_profile_payment_aliases", {
+        .order("name", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+      fetchAllRows((from, to) => supabase.rpc("list_profile_payment_aliases", {
         p_admin_profile_id: admin.id,
-      }),
-      supabase.rpc("list_accounting_bank_links", {
+      }).order("id", { ascending: true }).range(from, to)),
+      fetchAllRows((from, to) => supabase.rpc("list_accounting_bank_links", {
         p_admin_profile_id: admin.id,
-      }),
+      }).order("item_type").order("item_id").range(from, to)),
     ]);
 
     const error =
@@ -397,7 +399,7 @@ export default async function AdminAccountingPage({ searchParams }: PageProps) {
             totals={report.totals}
             incomeItems={incomeList}
             expenseItems={expenseList}
-            cumulativeBalance={cumulativeReport.totals.balance}
+            cumulativeBalance={cumulativeBalance}
           />
         ) : (
           <AccountingManagementPanel

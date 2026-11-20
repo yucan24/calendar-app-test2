@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.vercel
+.env*
+*.csv
+*.backup*
+*.gz
+supabase
+scripts
+tests
+docs
+テスト.md
+tsconfig.tsbuildinfo

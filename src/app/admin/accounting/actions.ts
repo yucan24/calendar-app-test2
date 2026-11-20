@@ -1,18 +1,50 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isValidDate, isValidTargetMonth } from "@/lib/month";
+import { buildMonthlyVirtualPaymentReport } from "../bank-reconciliation/paymentReport";
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 const VALID_INCOME_CATEGORIES = ["sponsorship", "other"];
 const VALID_EXPENSE_CATEGORIES = ["event", "fee", "other"];
 
-function cleanText(value: FormDataEntryValue | null) {
-  return String(value ?? "").trim();
+export async function settleCoachOffsetsWithoutTransfer(formData: FormData) {
+  const admin = await requireAdmin();
+  const coachId = String(formData.get("coach_id") ?? "");
+  const targetMonth = String(formData.get("target_month") ?? "");
+  const report = await buildMonthlyVirtualPaymentReport(admin, targetMonth);
+  const row = report.rows.find((item) => item.coachId === coachId);
+  if (!row || row.netPay !== 0 || row.pendingDeductionTotal <= 0) {
+    throw new Error("振込額が0円で、未精算の相殺項目がある場合だけ実行できます");
+  }
+  const { error } = await supabase.rpc("settle_coach_offsets_without_transfer", {
+    p_admin_profile_id: admin.id, p_profile_id: coachId, p_target_month: targetMonth,
+    p_billing_item_ids: row.deductionItems.filter((item) => item.status === "unpaid").map((item) => item.id),
+    p_available_amount: row.netPayBeforeDeduction,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/accounting");
+  revalidatePath("/admin/users");
+  revalidatePath("/user/payment-check");
 }
 
-function isValidDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+export async function cancelCoachOffsetsWithoutTransfer(formData: FormData) {
+  const admin = await requireAdmin();
+  const coachId = String(formData.get("coach_id") ?? "");
+  const targetMonth = String(formData.get("target_month") ?? "");
+  if (!isValidTargetMonth(targetMonth)) throw new Error("対象月が不正です");
+  const { error } = await supabase.rpc("cancel_coach_offsets_without_transfer", {
+    p_admin_profile_id: admin.id, p_profile_id: coachId, p_target_month: targetMonth,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/accounting");
+  revalidatePath("/admin/users");
+  revalidatePath("/user/payment-check");
+}
+
+function cleanText(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
 }
 
 function parseAmount(value: FormDataEntryValue | null) {

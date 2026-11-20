@@ -22,6 +22,8 @@ export type AccountingBillingItem = {
   amount: number;
   status: string;
   note: string | null;
+  coach_payment_transaction_id?: string | null;
+  coach_payment_offset_month?: string | null;
 };
 
 export type AccountingIncomeItem = {
@@ -68,6 +70,7 @@ export type AccountingReportRow = {
   taxOfficePayment: number;
   reimbursedExpense: number;
   unpaidDeductionTotal: number;
+  pendingDeductionTotal: number;
   netPayBeforeDeduction: number;
   netPay: number;
   deductionItems: AccountingBillingItem[];
@@ -76,6 +79,7 @@ export type AccountingReportRow = {
 
 export type AccountingReportTotals = {
   paidTuitionTotal: number;
+  paidOtherChargesTotal: number;
   sponsorshipTotal: number;
   otherIncomeTotal: number;
   incomeItemsTotal: number;
@@ -272,7 +276,14 @@ export function buildAccountingReport(input: {
   const deductionItemsByCoach = new Map<string, AccountingBillingItem[]>();
 
   for (const item of billingItems) {
-    if (item.status !== "unpaid" || isRefundItem(item)) continue;
+    if (
+      (item.status !== "unpaid" &&
+        !item.coach_payment_transaction_id &&
+        !item.coach_payment_offset_month) ||
+      isRefundItem(item)
+    ) {
+      continue;
+    }
 
     const list = deductionItemsByCoach.get(item.user_id) ?? [];
     list.push(item);
@@ -294,9 +305,35 @@ export function buildAccountingReport(input: {
     const rewardCutTotal = summary?.rewardCutTotal ?? 0;
     const withholdingTax = calculateWithholdingTax(grossReward);
     const reimbursedExpense = travelExpense + otherExpense;
-    const deductionItems = deductionItemsByCoach.get(coach.id) ?? [];
+    const netPayBeforeDeduction =
+      grossReward - withholdingTax + reimbursedExpense;
+    const candidates = deductionItemsByCoach.get(coach.id) ?? [];
+    const deductionItems = candidates
+      .filter((item) =>
+        Boolean(item.coach_payment_transaction_id || item.coach_payment_offset_month)
+      )
+      .sort((a, b) => a.id.localeCompare(b.id));
+    let remaining = Math.max(
+      0,
+      netPayBeforeDeduction - sumBillingItemAmounts(deductionItems)
+    );
+    const unpaidItems = candidates
+      .filter((item) => item.status === "unpaid" &&
+        !item.coach_payment_transaction_id && !item.coach_payment_offset_month)
+      .sort((a, b) =>
+        a.target_month.localeCompare(b.target_month) || a.id.localeCompare(b.id)
+      );
+    // 一部だけの請求精算は行わず、全額を相殺できる項目だけを選ぶ。
+    for (const item of unpaidItems) {
+      if (item.amount <= remaining) {
+        deductionItems.push(item);
+        remaining -= item.amount;
+      }
+    }
     const unpaidDeductionTotal = sumBillingItemAmounts(deductionItems);
-    const netPayBeforeDeduction = grossReward - withholdingTax;
+    const pendingDeductionTotal = sumBillingItemAmounts(
+      deductionItems.filter((item) => item.status === "unpaid")
+    );
 
     return {
       coachId: coach.id,
@@ -312,8 +349,9 @@ export function buildAccountingReport(input: {
       taxOfficePayment: withholdingTax,
       reimbursedExpense,
       unpaidDeductionTotal,
+      pendingDeductionTotal,
       netPayBeforeDeduction,
-      netPay: netPayBeforeDeduction - unpaidDeductionTotal,
+      netPay: Math.max(0, netPayBeforeDeduction - unpaidDeductionTotal),
       deductionItems,
       rewardAdjustments: summary
         ? Array.from(summary.rewardAdjustments.values())
@@ -332,6 +370,11 @@ export function buildAccountingReport(input: {
   const unpaidChargeTotal = sumBillingItemAmounts(
     billingItems.filter(
       (item) => item.status === "unpaid" && !isRefundItem(item)
+    )
+  );
+  const paidOtherChargesTotal = sumBillingItemAmounts(
+    billingItems.filter((item) =>
+      item.status === "paid" && item.category !== "tuition" && !isRefundItem(item)
     )
   );
   const paidRefundTotal = sumBillingItemAmounts(
@@ -380,13 +423,14 @@ export function buildAccountingReport(input: {
   const netPayTotal = rows.reduce((sum, row) => sum + row.netPay, 0);
   const remainingUnpaidChargeTotal = Math.max(
     0,
-    unpaidChargeTotal - unpaidDeductionTotal
+    unpaidChargeTotal - rows.reduce((sum, row) => sum + row.pendingDeductionTotal, 0)
   );
-  const incomeTotal = paidTuitionTotal + incomeItemsTotal;
+  const incomeTotal = paidTuitionTotal + paidOtherChargesTotal + incomeItemsTotal;
   const expenseTotal =
-    netPayBeforeDeductionTotal + withholdingTaxTotal + expenseItemsTotal;
+    netPayBeforeDeductionTotal + withholdingTaxTotal + expenseItemsTotal + paidRefundTotal;
   const totals: AccountingReportTotals = {
     paidTuitionTotal,
+    paidOtherChargesTotal,
     sponsorshipTotal,
     otherIncomeTotal,
     incomeItemsTotal,
@@ -414,4 +458,26 @@ export function buildAccountingReport(input: {
     rows,
     totals,
   };
+}
+
+export function buildCumulativeAccountingBalance(
+  input: Parameters<typeof buildAccountingReport>[0]
+) {
+  const months = new Set([
+    ...(input.logs ?? []).map((log) => log.work_date.slice(0, 7)),
+    ...(input.billingItems ?? []).map((item) => item.target_month),
+    ...(input.incomeItems ?? []).map((item) => item.received_on.slice(0, 7)),
+    ...(input.expenseItems ?? []).map((item) => item.spent_on.slice(0, 7)),
+  ]);
+  // 税の端数処理と請求相殺は月ごとに行い、月次報告の合計と一致させる。
+  return [...months].reduce((balance, month) => {
+    const report = buildAccountingReport({
+      ...input,
+      logs: input.logs?.filter((log) => log.work_date.startsWith(month)),
+      billingItems: input.billingItems?.filter((item) => item.target_month === month),
+      incomeItems: input.incomeItems?.filter((item) => item.received_on.startsWith(month)),
+      expenseItems: input.expenseItems?.filter((item) => item.spent_on.startsWith(month)),
+    });
+    return balance + report.totals.balance;
+  }, 0);
 }

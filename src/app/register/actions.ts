@@ -1,6 +1,7 @@
 "use server";
 
 import { supabase } from "@/lib/supabase";
+import { allowAuthAttempt } from "@/lib/authRateLimit";
 
 export type RegisterState = {
   ok: boolean;
@@ -36,17 +37,17 @@ export async function registerMember(
   const email = cleanText(formData.get("email"));
   const loginCode = cleanText(formData.get("login_code"));
 
-  if (!name) {
+  if (!name || name.length > 100) {
     return {
       ok: false,
       message: "名前を入力してください。",
     };
   }
 
-  if (!email) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return {
       ok: false,
-      message: "メールアドレスを入力してください。",
+      message: "正しいメールアドレスを入力してください。",
     };
   }
 
@@ -57,11 +58,18 @@ export async function registerMember(
     };
   }
 
+  try {
+    if (!await allowAuthAttempt("register")) return { ok: false, message: "登録の試行回数が上限に達しました。時間をおいてお試しください。" };
+  } catch {
+    return { ok: false, message: "ただいま登録できません。時間をおいてお試しください。" };
+  }
+  const groupId = process.env.APP_GROUP_ID;
+  if (!groupId) return { ok: false, message: "登録先の設定を確認できません。管理者へお問い合わせください。" };
+
   const { data: group, error: groupError } = await supabase
     .from("groups")
     .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
+    .eq("id", groupId)
     .maybeSingle();
 
   if (groupError) {

@@ -1,6 +1,8 @@
+import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { sessionCookieName, hashSessionToken } from "@/lib/session";
 
 export type CurrentProfile = {
   id: string;
@@ -12,23 +14,30 @@ export type CurrentProfile = {
 
 export async function getCurrentProfile() {
   const cookieStore = await cookies();
-  const profileId = cookieStore.get("profile_id")?.value;
+  const tokenHash = hashSessionToken(cookieStore.get(sessionCookieName())?.value);
 
-  if (!profileId) {
+  if (!tokenHash) {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, group_id, role, name, email")
-    .eq("id", profileId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_app_session_profile", { p_token_hash: tokenHash });
 
-  if (error || !data) {
+  if (error || !data?.[0]) {
     return null;
   }
 
-  return data as CurrentProfile;
+  return data[0] as CurrentProfile;
+}
+
+export async function endSession() {
+  const cookieStore = await cookies();
+  const tokenHash = hashSessionToken(cookieStore.get(sessionCookieName())?.value);
+  if (tokenHash) {
+    const { error } = await supabase.from("app_sessions").delete().eq("token_hash", tokenHash);
+    if (error) throw new Error("ログアウトに失敗しました。もう一度お試しください。");
+  }
+  cookieStore.delete(sessionCookieName());
+  cookieStore.delete("profile_id");
 }
 
 export async function requireLogin() {

@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
 import SubmitButton from "@/components/SubmitButton";
 import AdminAttendanceSelect from "./AdminAttendanceSelect";
+import { updateEvent, deleteEvent } from "./actions";
 
 type PageProps = {
   params: Promise<{
@@ -37,10 +37,6 @@ function toDateKey(value: string | null) {
   return `${year}-${month}-${day}`;
 }
 
-function toUtcISOStringFromDateKey(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
-}
-
 function formatDate(value: string | null) {
   if (!value) return "未設定";
 
@@ -48,11 +44,6 @@ function formatDate(value: string | null) {
     dateStyle: "full",
     timeZone: "Asia/Tokyo",
   }).format(new Date(value));
-}
-
-function safeColor(value: FormDataEntryValue | null, fallback = "#000000") {
-  const text = String(value || "").trim();
-  return /^#[0-9a-fA-F]{6}$/.test(text) ? text : fallback;
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -78,84 +69,6 @@ function createSummary(
     pending: rows.filter((row) => row.response?.status === "pending").length,
     noAnswer: rows.filter((row) => !row.response).length,
   };
-}
-
-async function updateEvent(formData: FormData) {
-  "use server";
-
-  const id = String(formData.get("id"));
-  const date = String(formData.get("date"));
-  const title = String(formData.get("title"));
-  const description = String(formData.get("description") ?? "");
-  const location = String(formData.get("location") ?? "");
-  const timeText = String(formData.get("time_text") ?? "");
-  const isHoliday = formData.get("is_holiday") === "on";
-  const isPeriod = formData.get("display_type_period") === "on";
-
-  const attendanceRequired = isPeriod
-    ? false
-    : formData.get("attendance_required") === "on";
-
-  const displayType = isPeriod ? "period" : "normal";
-
-  const titleColor = safeColor(formData.get("title_color"));
-  const locationColor = safeColor(formData.get("location_color"));
-  const timeColor = safeColor(formData.get("time_color"));
-
-  if (!id || !date || !title) {
-    throw new Error("必須項目が不足しています");
-  }
-
-  const startAt = toUtcISOStringFromDateKey(date);
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .update({
-      title,
-      description,
-      location,
-      time_text: timeText,
-      start_at: startAt,
-      end_at: null,
-      is_holiday: isHoliday,
-      title_color: titleColor,
-      location_color: locationColor,
-      time_color: timeColor,
-      attendance_required: attendanceRequired,
-      display_type: displayType,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath(`/admin/calendar/${id}`);
-  revalidatePath("/admin/calendar");
-  redirect(`/admin/calendar/${id}`);
-}
-
-async function deleteEvent(formData: FormData) {
-  "use server";
-
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("削除対象が不明です");
-  }
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/calendar");
-  redirect("/admin/calendar");
 }
 
 export default async function AdminCalendarDetailPage({ params }: PageProps) {

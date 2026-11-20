@@ -38,6 +38,7 @@ type Props = {
   existingAccountingItems: ExistingAccountingItem[];
   coachPayments: CoachPaymentCandidate[];
   taxPaymentAmount: number;
+  taxPaidAmount: number;
   targetMonth: string;
 };
 
@@ -95,6 +96,7 @@ function TransactionCard({
   existingAccountingItems,
   coachPayments,
   taxPaymentAmount,
+  taxPaidAmount,
   targetMonth,
 }: Omit<Props, "transactions"> & { transaction: BankTransaction }) {
   const direction = getBankDirection(transaction);
@@ -163,10 +165,13 @@ function TransactionCard({
     .filter((item) => selectedBillingIds.includes(item.id))
     .reduce((sum, item) => sum + item.amount, 0);
   const availableCoachPayments = [...coachPayments].sort((left, right) => {
-    const leftExact = left.amount === amount ? 1 : 0;
-    const rightExact = right.amount === amount ? 1 : 0;
+    const leftExact = left.remainingAmount === amount ? 1 : 0;
+    const rightExact = right.remainingAmount === amount ? 1 : 0;
     return rightExact - leftExact || left.coachName.localeCompare(right.coachName, "ja");
   });
+  const [selectedCoachId, setSelectedCoachId] = useState(availableCoachPayments[0]?.coachId ?? "");
+  const selectedCoach = availableCoachPayments.find((payment) => payment.coachId === selectedCoachId);
+  const taxRemainingAmount = Math.max(0, taxPaymentAmount - taxPaidAmount);
   const inferredIncomeCategory = purposeCandidates.some(
     (purpose) => purpose.category === "sponsorship"
   )
@@ -221,6 +226,7 @@ function TransactionCard({
           <p className="font-bold text-gray-900">
             {formatDate(transaction.transactedOn)}
           </p>
+          {transaction.accountLabel && <p className="mt-1 text-xs text-gray-600">{transaction.accountLabel}</p>}
         </div>
         <div>
           <span
@@ -652,17 +658,27 @@ function TransactionCard({
                       <label className="block text-sm font-bold text-gray-900">
                         指導者（{formatTargetMonth(targetMonth)}）
                       </label>
-                      <select name="coach_id" required className={fieldClass}>
+                      <select name="coach_id" required value={selectedCoachId} onChange={(event) => setSelectedCoachId(event.target.value)} className={fieldClass}>
                         {availableCoachPayments.map((payment) => (
                           <option key={payment.coachId} value={payment.coachId}>
-                            {payment.coachName}・{formatYen(payment.amount)}
+                            {payment.coachName}・残り{formatYen(payment.remainingAmount)}（予定{formatYen(payment.amount)}）
                           </option>
                         ))}
                       </select>
                     </div>
+                    {selectedCoach && (
+                      <p className="text-sm font-medium text-gray-700">
+                        照合済み {formatYen(selectedCoach.paidAmount)}・今回 {formatYen(amount)}・照合後の残り {formatYen(Math.max(0, selectedCoach.remainingAmount - amount))}
+                        {selectedCoach.deductionTotal > 0 && `。精算完了時に請求${formatYen(selectedCoach.deductionTotal)}を相殺します。`}
+                      </p>
+                    )}
                     <p className="rounded bg-amber-100 p-3 text-sm font-bold text-amber-800">
                       明細額と計算上の手取りが違っても、内容を確認すれば確定できます。
                     </p>
+                    <label className="flex items-start gap-2 text-sm font-medium text-gray-800">
+                      <input type="checkbox" name="complete_payment" className="mt-1" />
+                      差額を確認し、今回で精算完了にする（分割払いの途中では選択しない）
+                    </label>
                     <input
                       name="note"
                       className={fieldClass}
@@ -700,7 +716,8 @@ function TransactionCard({
                       {formatTargetMonth(targetMonth)}の源泉税額：
                       {formatYen(taxPaymentAmount)}
                     </p>
-                    {taxPaymentAmount !== amount && (
+                    <p className="text-sm text-gray-700">納付済み {formatYen(taxPaidAmount)}・残り {formatYen(taxRemainingAmount)}</p>
+                    {taxRemainingAmount !== amount && (
                       <p className="rounded bg-amber-100 p-3 text-sm font-bold text-amber-800">
                         明細額 {formatYen(amount)}と一致しません。内容を確認すればこのまま確定できます。
                       </p>
@@ -886,6 +903,7 @@ export default function BankTransactionReviewClient(props: Props) {
           existingAccountingItems={props.existingAccountingItems}
           coachPayments={props.coachPayments}
           taxPaymentAmount={props.taxPaymentAmount}
+          taxPaidAmount={props.taxPaidAmount}
           targetMonth={props.targetMonth}
         />
       )}

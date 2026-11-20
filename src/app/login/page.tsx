@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { authenticateLogin } from "@/lib/login";
+import { sessionCookieName, SESSION_MAX_AGE } from "@/lib/session";
 import SubmitButton from "@/components/SubmitButton";
 
 
@@ -19,7 +20,7 @@ async function login(formData: FormData) {
 
   const loginCode = String(formData.get("login_code") ?? "").trim();
 
-  if (!name || !loginCode) {
+  if (!name || name.length > 100 || !loginCode) {
     redirect("/login?error=missing");
   }
 
@@ -27,32 +28,21 @@ async function login(formData: FormData) {
     redirect("/login?error=code");
   }
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id, role, login_enabled")
-    .eq("name", name)
-    .eq("login_code", loginCode)
-    .maybeSingle();
-
-  if (error || !profile) {
-    redirect("/login?error=failed");
-  }
-
-  if (!profile.login_enabled) {
-    redirect("/login?error=pending");
-  }
+  const result = await authenticateLogin(name, loginCode);
+  if (!result.ok) redirect(`/login?error=${result.reason}`);
 
   const cookieStore = await cookies();
 
-  cookieStore.set("profile_id", profile.id, {
+  cookieStore.delete("profile_id");
+  cookieStore.set(sessionCookieName(), result.token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: SESSION_MAX_AGE,
   });
 
-  if (profile.role === "admin") {
+  if (result.role === "admin") {
     redirect("/admin");
   }
 
@@ -64,6 +54,8 @@ function errorMessage(error?: string) {
   if (error === "code") return "4桁コードは数字4桁で入力してください。";
   if (error === "failed") return "名前または4桁コードが違います。";
   if (error === "pending") return "管理者の承認が完了していません。";
+  if (error === "limited") return "ログインの試行回数が上限に達しました。時間をおいてお試しください。";
+  if (error === "unavailable") return "ただいまログインできません。時間をおいてお試しください。";
   return "";
 }
 

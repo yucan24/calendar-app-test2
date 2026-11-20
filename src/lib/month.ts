@@ -13,7 +13,13 @@ export function getCurrentTargetMonth() {
 
 export function isValidTargetMonth(value: string | undefined | null) {
   if (!value) return false;
-  return /^\d{4}-\d{2}$/.test(value);
+  return /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
+export function isValidDate(value: string | undefined | null) {
+  if (!value || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export function formatTargetMonth(value: string) {

@@ -1,10 +1,8 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { endSession } from "@/lib/auth";
 
 export async function GET() {
-  const cookieStore = await cookies();
-
-  cookieStore.delete("profile_id");
+  await endSession();
 
   redirect("/login");
 }

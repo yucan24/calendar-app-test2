@@ -166,17 +166,23 @@ function parseCsvRows(text: string) {
 }
 
 function decodeBankCsv(buffer: ArrayBuffer) {
+  // UTF-8を先に厳密に判定する。Shift_JISで先に読むと日本語が文字化けする。
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/^\uFEFF/u, "");
+  } catch {
+    // UTF-8として不正な場合は銀行標準のCP932を読む。
+  }
   const encodings = ["shift_jis", "windows-31j", "ms932"];
 
   for (const encoding of encodings) {
     try {
-      return new TextDecoder(encoding).decode(buffer).replace(/^\uFEFF/u, "");
+      return new TextDecoder(encoding, { fatal: true }).decode(buffer).replace(/^\uFEFF/u, "");
     } catch {
       // 実行環境が対応している次のCP932互換名を試す。
     }
   }
 
-  throw new Error("この環境ではShift_JISのCSVを読み取れません");
+  throw new Error("CSVの文字コードを読み取れません。CP932またはUTF-8で保存してください");
 }
 
 function parseCompactDate(value: string, label: string) {

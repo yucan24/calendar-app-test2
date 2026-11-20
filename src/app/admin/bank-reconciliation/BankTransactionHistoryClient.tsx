@@ -50,6 +50,9 @@ function cancellationDescription(transaction: BankTransaction) {
   if (matchTypes.has("billing_item")) {
     return "紐付けを取り消し、請求・返金を未払いへ戻します。";
   }
+  if (matchTypes.has("coach_net_pay")) {
+    return "送金の紐付けを取り消します。精算が未完了に戻る場合、相殺した請求も未払いへ戻します。";
+  }
 
   if (keepsExistingAccountingItem) {
     return "紐付けを取り消し、既存の会計項目はそのまま残します。";
@@ -186,6 +189,7 @@ export default function BankTransactionHistoryClient({
             <p className="break-words font-bold text-gray-900">
               {transaction.description || "摘要なし"}
             </p>
+            {transaction.accountLabel && <p className="text-xs text-gray-600">{transaction.accountLabel}</p>}
           </div>
 
           {status === "matched" ? (

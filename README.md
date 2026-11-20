@@ -10,14 +10,15 @@
 - Language: TypeScript
 - UI: React / Tailwind CSS
 - Backend / DB: Supabase
-- Hosting: Vercel
+- Hosting: Vercel（NCST / Hobby）
+- 本番URL: https://nsct-u15bbc.vercel.app
 
 主な依存関係:
 
 ```json
 {
   "@supabase/supabase-js": "^2.108.2",
-  "next": "16.2.9",
+  "next": "16.4.6",
   "react": "19.2.4",
   "react-dom": "19.2.4",
   "typescript": "^5",
@@ -29,6 +30,8 @@
 
 - ログイン
   - Supabase Authではなく、`profiles` テーブルの `name` + `login_code` でログインする。
+  - 32バイトのランダムトークンによるサーバー検証型セッションを使用。DBにはトークンのSHA-256だけを保存する。
+  - ログアウト、ログイン停止、コード・権限変更でセッションを失効させる。ログイン試行回数はDBで制限する。
   - `role = admin` の場合は管理者画面へ遷移する。
 
 - カレンダー
@@ -50,10 +53,21 @@
   - 指導時間、事務時間、交通費、その他立替の記録。
 
 - 会計管理
-  - 月謝、協賛金、その他収入の集計。
+  - 月謝、遠征費などの支払済み請求、協賛金、その他収入の集計。
   - 指導者報酬、源泉税、その他出費の集計。
+  - 支払済み返金、交通費・立替経費も出費に含む。
   - 指導者別の報酬・税額・手取り表示。
+  - 交通費・立替経費は報酬と合算して振込額に加える。
+  - 指導者の請求は、精算完了時に報酬と相殺して支払済みにする。取消時は未払いへ戻す。
+  - 振込額0円の場合は「振込なしで相殺を確定」できる。
   - 月次レポートの画像出力。
+
+- 銀行明細照合（会計管理画面内）
+  - 八十二銀行形式のCP932 / Shift_JIS・UTF-8 CSVを取込（5MB・5,000明細まで）。
+  - 口座ごとに重複を判定。同じ取引番号で内容が変わっていた場合は上書きせず警告する。
+  - 未払い請求、返金、収入・出費、指導者への送金、源泉税納付へ手動で紐付ける。
+  - 指導者への送金・源泉税納付は分割処理でき、照合済み額と残額を表示する。
+  - 処理済み・対象外の履歴確認、紐付け取消に対応。
 
 - 開発者への意見
   - DB保存ではなく、固定メールアドレス宛の `mailto:` で送信する。
@@ -72,7 +86,7 @@
 /user                     ユーザートップ
 /user/calendar            ユーザーカレンダー
 /user/payment-check       支払い確認
-/user/history             履歴
+/user/history             支払い確認内の履歴へ転送
 /feedback                 開発者への意見
 ```
 
@@ -81,11 +95,12 @@
 `.env.local` をプロジェクトルート、つまり `package.json` と同じ階層に置きます。
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_URL=https://xvgqwdiyoorzejfozoca.supabase.co
+SUPABASE_SECRET_KEY=<テストDBのsecret keyまたはservice_role key>
+APP_GROUP_ID=00000000-0000-0000-0000-000000000001
 ```
 
-`NEXT_PUBLIC_` が付く値はブラウザ側にも公開されます。Supabaseの publishable / anon key のみを入れ、service role key や secret key は入れないでください。
+DB接続は `server-only` モジュールだけで行います。`SUPABASE_SECRET_KEY` にsecret keyまたは従来のservice_role keyを設定します。これを `NEXT_PUBLIC_` 変数に入れないでください。新規登録先はサーバー側の `APP_GROUP_ID` で指定します。[.env.example](.env.example) と [.env.production.example](.env.production.example) は空欄のテンプレートです。
 
 ## ローカル開発
 
@@ -110,17 +125,12 @@ http://localhost:3000/login
 
 このプロジェクトでは、本番DBを直接触らずに修正・検証するため、Supabaseのテスト環境と本番環境を分けて運用します。
 
-現在のテストSupabase project:
+チーム管理・東京リージョンの2プロジェクトを使用します。
 
-```text
-lrusdklwqsjtotraskvx
-```
-
-本番Supabase project:
-
-```text
-tqkblkxjgbnxoqkralmn
-```
+| 用途 | Project ref | 状態 |
+| --- | --- | --- |
+| 新本番DB | `wswntpyibylcrjjdmguy` | バックアップの実データを復元し、本番サイトから接続済み。DBへの公開アクセスは禁止 |
+| 新テストDB | `xvgqwdiyoorzejfozoca` | 架空のテストデータだけを投入。ローカルアプリの接続先 |
 
 DB migration や検証用データ投入を行う前に、必ず接続先を確認してください。
 
@@ -128,34 +138,59 @@ DB migration や検証用データ投入を行う前に、必ず接続先を確�
 cat supabase/.temp/project-ref
 ```
 
-テスト作業では `lrusdklwqsjtotraskvx` であることを確認します。`tqkblkxjgbnxoqkralmn` の場合は本番DBなので、安易に `supabase db push` やデータ投入を行わないでください。
+テスト作業では `xvgqwdiyoorzejfozoca` であることを確認します。`.env.local` とCLIのリンク先も設定済みです。開発サーバーは新旧の本番DBへの接続を拒否します。Vercelも本番は本番DB、PreviewはテストDBだけに接続できます。旧テストDB `lrusdklwqsjtotraskvx`、旧本番DB `tqkblkxjgbnxoqkralmn`、他アプリのプロジェクトは変更していません。
 
 ## Supabase CLI
 
-テストDBにmigrationを適用する例:
+現在の端末では旧CLIの直接DB接続が失敗するため、CLI 3.2.0のManagement API経由で新環境を構築しました。新本番・新テストの両方に全18本のmigrationと適用履歴を登録済みです。テストDBの履歴の読み取り確認:
 
 ```bash
-supabase link --project-ref lrusdklwqsjtotraskvx
-export SUPABASE_DB_PASSWORD='テストDBのDatabase Password'
-supabase db push
+npx --yes supabase@3.2.0 db query --remote=xvgqwdiyoorzejfozoca --read-only --output json "select version, name from supabase_migrations.schema_migrations order by version"
 ```
 
+接続設定・適用方法は `docs/environment.md` を参照してください。初期化やseedの再投入は不要です。
+
 本番DBへ適用する場合は、事前に内容を十分確認し、ユーザーから明示的な許可を得てから実行します。
+
+## 会計機能の更新（2026-11-20）
+
+会計の相殺記録・口座別識別・取込警告に対応し、`20261120030000_secure_server_sessions.sql` まで適用済みです。ひとつ前のmigrationで旧プロフィールのフラグ・指導記録の状態・回数券残数も保持しています。テスト用seedを本番へ投入しないでください。
+
+- 請求に基づく収入と返金は入出金日ではなく請求対象月、手入力の収入・出費は記録日、指導者報酬は勤務月で集計します。銀行残高そのものではなく、対象月に基づく会計報告です。
+- 相殺しても報酬費用は減らさず、対応する請求を支払済みにして収入に含めます。相殺済み請求は手動編集できません。先に銀行照合または振込なしの相殺を取り消してください。
+- 相殺は全額を精算できる請求単位で行います。報酬を超える請求や、請求の一部だけの相殺は未払いとして残します。対象は報酬と同じ月の請求です。
+- 分割送金の合計が予定額へ到達すると相殺を確定します。差額がある場合は管理者が「今回で精算完了」を選択できます。
+- 月次の端数処理・相殺を月ごとに合計して累計収支を計算します。
+- 過去に保存された不正対象月はmigrationで削除・変換しません。新規・更新分だけを拒否します。公開前に既存データを調査・訂正してください。
+- 元のCSV取込情報を失った明細は、口座を推測せず保持します。その明細と再取込の重複は手動確認が必要です。
+
+2026-11-20に会計・復元・認証・権限の計37件のテストがPASSしました。テストDBで13画面、本番サイトで既存の管理者・一般ユーザーのログイン、会計5タブと予定詳細を含む15画面、9種類のアクセス制限・遷移、ログアウト後の失効を確認済みです。ブラウザでの目視確認は未実施です。
+
+## 本番バックアップの復元（2026-11-20）
+
+提供された `db_cluster-29-09-2026@08-35-50.backup.gz` から、新本番DBへ15テーブル・計74件を復元しました。チーム2件、プロフィール13件、予定20件、出欠20件、請求11件、指導記録4件、回数券残数4件です。元の列・ID・値を保ち、ローカル復元との件数・内容ハッシュ一致を確認しました。テストDBには実データを入れていません。
+
+ファイル名は9月29日ですが、含まれる主要データの最新更新は2026年6月です。バックアップにない期間のデータは復元できていません。旧DBのログインは使わず、クラスタのロール・管理スキーマ・古いmigration履歴は復元対象から除外しました。
+
+本番・テストの全17テーブル（業務データ15＋認証用2）でRLSを有効化し、公開ロールからのテーブルアクセス・RPC実行を禁止しています。DB接続はサーバー専用キーと検証済みセッションで行います。**本番は https://nsct-u15bbc.vercel.app で公開済みです。** 既存の承認済み会員は、従来の名前と4桁コードでログインできます。設定・復元・公開手順は [docs/environment.md](docs/environment.md) を参照してください。
 
 ## 注意事項
 
 - `.env.local` はGitにコミットしない。
 - 銀行明細CSVなど個人情報を含むファイルはGitにコミットしない。
 - 本番Supabaseのテーブル、RLS/Policy、既存データは調査なしに変更しない。
-- ログイン方式は独自実装であり、`profile_id` cookie に依存しているため、将来的に認可設計の見直し余地がある。
+- ログイン方式は独自実装。旧 `profile_id` cookie は無効。ログイン状態はDB内のセッションと現在の会員権限で毎回確認する。
 - 請求・会計・銀行明細照合まわりは本番影響が大きいので、まずテスト環境で検証する。
 
 ## 検証コマンド
 
 ```bash
+npm test
 npx tsc --noEmit --pretty false
 npm run lint
 npm run build
 ```
 
 `npm run build` 後に `next-env.d.ts` が差分になることがあります。不要な差分であれば内容を確認して戻してください。
+
+`npm test` は外部DBへ接続せず、CSV解析、会計計算、5,000明細の取得、実際のServer ActionとSQLによる分割送金・請求相殺・取消・DB移行・セッション失効・他チーム操作拒否を検証します。

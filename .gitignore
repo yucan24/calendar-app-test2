@@ -9,3 +9,6 @@ tsconfig.tsbuildinfo
 
 # 実データを含む銀行CSV
 533024*.csv
+.env*
+!.env.example
+!.env.production.example

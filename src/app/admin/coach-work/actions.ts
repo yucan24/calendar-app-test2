@@ -3,14 +3,11 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
+import { isValidDate } from "@/lib/month";
 import { requireAdmin } from "@/lib/auth";
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
-}
-
-function isValidDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function parseNonNegativeInteger(

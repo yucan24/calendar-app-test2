@@ -12,6 +12,8 @@ import {
   type AccountingRewardAdjustment,
 } from "@/lib/accounting";
 import { formatTargetMonth, formatYen } from "@/lib/month";
+import SubmitButton from "@/components/SubmitButton";
+import { settleCoachOffsetsWithoutTransfer, cancelCoachOffsetsWithoutTransfer } from "./actions";
 
 type Props = {
   targetMonth: string;
@@ -129,8 +131,13 @@ function getIncomeBreakdownRows(
   return [
     {
       label: "支払い済み月謝",
-      note: "保護者から入金済み",
+      note: "対象月の支払い済み請求額",
       amount: totals.paidTuitionTotal,
+    },
+    {
+      label: "その他の支払い済み請求",
+      note: "遠征費・大会費・ユニフォーム代など",
+      amount: totals.paidOtherChargesTotal,
     },
     {
       label: "協賛金",
@@ -156,13 +163,23 @@ function getExpenseBreakdownRows(
   return [
     {
       label: "指導者報酬",
-      note: "報酬 - 源泉税",
-      amount: totals.netPayBeforeDeductionTotal,
+      note: "報酬 - 源泉税（請求との相殺を含む）",
+      amount: totals.netPayBeforeDeductionTotal - totals.reimbursedExpenseTotal,
     },
     {
       label: "源泉税納税",
       note: `支給報酬 ${formatYen(totals.grossRewardTotal)} × ${formatTaxRate()}`,
       amount: totals.withholdingTaxTotal,
+    },
+    {
+      label: "交通費・立替精算",
+      note: "報酬と合算して振込",
+      amount: totals.reimbursedExpenseTotal,
+    },
+    {
+      label: "支払い済み返金",
+      note: "会員への返金",
+      amount: totals.paidRefundTotal,
     },
     {
       label: "その他出費",
@@ -326,7 +343,7 @@ function createReportImageDataUrl(input: Props) {
     const deductionHeight =
       row.unpaidDeductionTotal > 0 ? 98 + row.deductionItems.length * 30 : 84;
 
-    return Math.max(84, rewardHeight, deductionHeight);
+    return Math.max(row.reimbursedExpense > 0 ? 108 : 84, rewardHeight, deductionHeight);
   });
   const coachTableHeight =
     58 + coachRowHeights.reduce((sum, height) => sum + height, 0);
@@ -602,6 +619,17 @@ function createReportImageDataUrl(input: Props) {
       font: `500 12px ${fontFamily}`,
       color: "#4b5563",
     });
+
+    if (row.reimbursedExpense > 0) {
+      drawText({
+        ctx,
+        text: `交通・立替 ${formatYen(row.reimbursedExpense)}`,
+        x: columns[1].x + 14,
+        y: rowTop + 78,
+        font: `500 12px ${fontFamily}`,
+        color: "#4b5563",
+      });
+    }
 
     drawText({
       ctx,
@@ -929,7 +957,7 @@ export default function AccountingReportClient({
             指導者別 報酬一覧
           </h3>
           <p className="mt-1 text-xs font-medium text-gray-600">
-            報酬、源泉税、未払い控除後の手取りを確認する一覧です。
+            立替経費を加算し、請求を相殺した後の振込額です。全額を精算できる請求のみ控除します。
           </p>
         </div>
       </div>
@@ -1015,6 +1043,25 @@ export default function AccountingReportClient({
                   >
                     {formatYen(row.netPay)}
                   </p>
+                  {row.reimbursedExpense > 0 && (
+                    <p className="mt-1 text-xs font-medium text-gray-700">
+                      交通費・立替 {formatYen(row.reimbursedExpense)}を含む
+                    </p>
+                  )}
+                  {row.netPay === 0 && row.pendingDeductionTotal > 0 && (
+                    <form action={settleCoachOffsetsWithoutTransfer} className="mt-2">
+                      <input type="hidden" name="coach_id" value={row.coachId} />
+                      <input type="hidden" name="target_month" value={targetMonth} />
+                      <SubmitButton className="rounded bg-gray-900 px-3 py-2 text-xs font-bold text-white">振込なしで相殺を確定</SubmitButton>
+                    </form>
+                  )}
+                  {row.deductionItems.some((item) => item.coach_payment_offset_month && !item.coach_payment_transaction_id) && (
+                    <form action={cancelCoachOffsetsWithoutTransfer} className="mt-2">
+                      <input type="hidden" name="coach_id" value={row.coachId} />
+                      <input type="hidden" name="target_month" value={targetMonth} />
+                      <SubmitButton className="rounded border border-red-300 px-3 py-2 text-xs font-bold text-red-700">振込なしの相殺を取り消す</SubmitButton>
+                    </form>
+                  )}
                   {row.unpaidDeductionTotal > 0 && (
                     <div className="mt-2 ml-auto w-full max-w-[320px] rounded border border-red-200 bg-red-50/70 p-2 text-xs text-red-800">
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
@@ -1096,6 +1143,9 @@ export default function AccountingReportClient({
           <p className="mt-2 text-sm font-medium text-gray-700">
             指導者別時給（未設定 {formatYen(COACH_HOURLY_RATE)} / 時間）、源泉税率{" "}
             {formatTaxRate()}（支給報酬のみ）
+          </p>
+          <p className="mt-2 text-sm font-medium text-gray-700">
+            月謝は入金日ではなく請求対象月に集計します。未入金は含めず、後から支払い済みにすると過去月も更新されます。
           </p>
         </div>
 

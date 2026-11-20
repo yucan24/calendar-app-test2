@@ -240,7 +240,7 @@ export default async function UserPaymentCheckPage() {
           </p>
         </section>
 
-        <section className="mt-5 rounded-lg bg-white p-6 shadow">
+        <section id="payment-history" className="mt-5 rounded-lg bg-white p-6 shadow">
           <h2 className="text-lg font-bold text-gray-900">
             直近3ヶ月の支払い・返金履歴
           </h2>
