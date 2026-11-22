@@ -8,6 +8,11 @@ export const applicationTableOrder = [
   "bank_transactions", "bank_transaction_matches", "developer_feedback", "ticket_balances",
 ];
 
+// Delivery history is retained; sessions, recovery links and throttling buckets
+// must never become valid again after a restore.
+export const backupTableOrder = [...applicationTableOrder, "app_account_notifications"];
+export const transientTables = ["app_sessions", "app_auth_rate_limits", "app_account_tokens"];
+
 export function identifier(value) {
   if (!/^[a-z_][a-z_0-9]*$/.test(value)) throw new Error("Unsupported SQL identifier");
   return `"${value}"`;
@@ -42,25 +47,38 @@ export function parsePublicBackup(compressed) {
   const hasConnections = /^\\connect /m.test(sql);
   let database = hasConnections ? null : "postgres";
   const tables = new Map();
+  const skippedTables = [];
   let active = null;
   for (const line of sql.split(/\r?\n/)) {
     if (active) {
       if (line === "\\.") { active = null; continue; }
       const values = line.split("\t");
       if (values.length !== active.columns.length) throw new Error(`COPY column count mismatch: ${active.name}`);
-      active.rows.push(values.map(decodeCopyValue));
+      if (!active.skip) active.rows.push(values.map(decodeCopyValue));
       continue;
     }
     const connection = /^\\connect (?:"([^"]+)"|(\S+))/.exec(line);
     if (connection) { database = connection[1] ?? connection[2]; continue; }
-    if (database !== "postgres") continue;
-    const copy = /^COPY public\.([a-z_][a-z_0-9]*) \(([^\n]+)\) FROM stdin;$/.exec(line);
-    if (!copy) continue;
-    const name = copy[1];
-    if (!applicationTableOrder.includes(name)) throw new Error(`Unknown public table: ${name}`);
+    const copy = /^COPY "?([a-z_][a-z_0-9]*)"?\."?([a-z_][a-z_0-9]*)"? \(([^\n]+)\) FROM stdin;$/.exec(line);
+    if (!copy) {
+      if (line.startsWith("COPY ")) throw new Error("Unsupported COPY header");
+      continue;
+    }
+    const [, schema, name, columnText] = copy;
+    const columns = columnText.split(/,\s*/).map((column) => column.replace(/^"|"$/g, ""));
+    if (database !== "postgres" || schema !== "public") {
+      active = { name, columns, skip: true };
+      continue;
+    }
+    if (transientTables.includes(name)) {
+      skippedTables.push(name);
+      active = { name, columns, skip: true };
+      continue;
+    }
+    if (!backupTableOrder.includes(name)) throw new Error(`Unknown public table: ${name}`);
     if (tables.has(name)) throw new Error(`Duplicate COPY block: ${name}`);
-    const columns = copy[2].split(/,\s*/).map((column) => column.replace(/^"|"$/g, ""));
     columns.forEach(identifier);
+    if (new Set(columns).size !== columns.length) throw new Error("Duplicate COPY column");
     if (!columns.includes("id")) throw new Error(`Missing stable ID: ${name}`);
     active = { name, columns, rows: [] };
     tables.set(name, active);
@@ -69,7 +87,8 @@ export function parsePublicBackup(compressed) {
   if (!tables.has("profiles") || !tables.has("groups")) throw new Error("Application tables were not found");
   return {
     sha256: createHash("sha256").update(compressed).digest("hex"),
-    tables: applicationTableOrder.filter((name) => tables.has(name)).map((name) => tables.get(name)),
+    tables: backupTableOrder.filter((name) => tables.has(name)).map((name) => tables.get(name)),
+    skippedTables,
   };
 }
 

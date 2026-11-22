@@ -42,6 +42,7 @@ test("不完全なCOPYや未知のテーブルを黙って省略しない", () =
   assert.throws(() => parsePublicBackup(sample("1\tonly-two-columns")), /column count/);
   assert.throws(() => parsePublicBackup(gzipSync("-- PostgreSQL database dump\nCOPY public.groups (id) FROM stdin;\n1\n")), /Unterminated COPY/);
   assert.throws(() => parsePublicBackup(gzipSync("-- PostgreSQL database dump\nCOPY public.unknown (id) FROM stdin;\n1\n\\.\n")), /Unknown public table/);
+  assert.throws(() => parsePublicBackup(gzipSync('-- PostgreSQL database dump\nCOPY public."Unknown Table" (id) FROM stdin;\n1\n\\.\n')), /Unsupported COPY header/);
 });
 
 test("引用符・改行・SQLに見える値をデータとして保ち、チェック失敗は原子的に戻す", async () => {

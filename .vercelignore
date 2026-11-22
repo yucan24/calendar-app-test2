@@ -13,3 +13,6 @@ docs
 テスト.md
 tsconfig.tsbuildinfo
 testdata
+.backups
+.backup-secrets
+*.nsct-backup

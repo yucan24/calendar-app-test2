@@ -15,3 +15,8 @@ tsconfig.tsbuildinfo
 
 # 実名・勤務時間・会計資料を含むテスト用原本
 testdata/
+
+# 暗号化バックアップ・復号鍵・復元用の個人情報
+.backups/
+.backup-secrets/
+*.nsct-backup
