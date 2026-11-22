@@ -128,6 +128,9 @@ export async function createBillingItem(formData: FormData) {
   });
 
   if (error) {
+    if (category === "tuition" && error.code === "23505") {
+      throw new Error("この会員の対象月の月謝は既に登録されています。");
+    }
     throw new Error(error.message);
   }
 
@@ -147,62 +150,14 @@ export async function createTuitionForAllUsers(formData: FormData) {
     throw new Error("対象月が不正です");
   }
 
-  const { data: users, error: usersError } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("group_id", admin.group_id)
-    .eq("role", "user")
-    .eq("login_enabled", true);
+  const { error } = await supabase.rpc("create_monthly_tuition", {
+    p_admin_id: admin.id,
+    p_target_month: targetMonth,
+    p_amount: amount,
+    p_note: note,
+  });
 
-  if (usersError) {
-    throw new Error(usersError.message);
-  }
-
-  const userIds = (users ?? []).map((user) => user.id);
-
-  if (userIds.length === 0) {
-    revalidatePath("/admin/users");
-    return;
-  }
-
-  const { data: existingItems, error: existingError } = await supabase
-    .from("billing_items")
-    .select("user_id")
-    .eq("group_id", admin.group_id)
-    .eq("target_month", targetMonth)
-    .eq("category", "tuition");
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const existingUserIds = new Set(
-    (existingItems ?? []).map((item) => item.user_id)
-  );
-
-  const rows = userIds
-    .filter((userId) => !existingUserIds.has(userId))
-    .map((userId) => ({
-      group_id: admin.group_id,
-      user_id: userId,
-      target_month: targetMonth,
-      category: "tuition",
-      title: "月謝",
-      amount,
-      status: "unpaid",
-      due_date: null,
-      note,
-      created_by: admin.id,
-      updated_at: new Date().toISOString(),
-    }));
-
-  if (rows.length > 0) {
-    const { error } = await supabase.from("billing_items").insert(rows);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
+  if (error) throw new Error(error.message);
 
   revalidatePath("/admin/users");
   revalidatePath("/user/payment-check");
@@ -247,6 +202,9 @@ export async function updateBillingItem(formData: FormData) {
     .eq("group_id", admin.group_id);
 
   if (error) {
+    if (category === "tuition" && error.code === "23505") {
+      throw new Error("この会員の対象月の月謝は既に登録されています。");
+    }
     throw new Error(error.message);
   }
 

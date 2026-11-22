@@ -66,7 +66,7 @@ export function postgresClient(db) {
     try {
       const { rows } = await db.query(sql, params);
       return { data: single ? rows[0] ?? null : rows, error: null };
-    } catch (error) { return { data: null, error: { message: error.message } }; }
+    } catch (error) { return { data: null, error: { message: error.message, code: error.code } }; }
   };
   return {
     rpc(name, args) {
