@@ -1,10 +1,7 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-
-export async function GET() {
-  const cookieStore = await cookies();
-
-  cookieStore.delete("profile_id");
-
-  redirect("/login");
+// GET may be requested by link prefetching; it must never invalidate a session.
+export function GET() {
+  return new Response(null, {
+    status: 307,
+    headers: { Location: "/", "Cache-Control": "no-store" },
+  });
 }

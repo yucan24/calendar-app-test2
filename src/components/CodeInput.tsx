@@ -1,0 +1,6 @@
+"use client";
+import { useId, useState } from "react";
+export default function CodeInput({ name, label, required = true, newCode = false }: { name: string; label: string; required?: boolean; newCode?: boolean }) {
+  const id = useId(), [visible, setVisible] = useState(false);
+  return <label className="block text-sm font-bold text-gray-900">{label}<span className="mt-1 flex gap-2"><input id={id} name={name} type={visible ? "text" : "password"} required={required} inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete={newCode ? "new-password" : "current-password"} className="ui-field min-w-0 flex-1 tracking-widest" onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/[^0-9]/g, "").slice(0, 4); }} /><button type="button" aria-controls={id} aria-pressed={visible} className="ui-button ui-button-secondary" onClick={() => setVisible(!visible)}>{visible ? "隠す" : "表示"}</button></span></label>;
+}

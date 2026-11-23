@@ -1,6 +1,9 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { allowAuthAttempt } from "@/lib/authRateLimit";
+import { notifyRegistration } from "@/lib/accountLinks";
 
 export type RegisterState = {
   ok: boolean;
@@ -34,34 +37,33 @@ export async function registerMember(
 ): Promise<RegisterState> {
   const name = normalizeName(formData.get("name"));
   const email = cleanText(formData.get("email"));
-  const loginCode = cleanText(formData.get("login_code"));
 
-  if (!name) {
+  if (!name || name.length > 100) {
     return {
       ok: false,
       message: "名前を入力してください。",
     };
   }
 
-  if (!email) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return {
       ok: false,
-      message: "メールアドレスを入力してください。",
+      message: "正しいメールアドレスを入力してください。",
     };
   }
 
-  if (!/^\d{4}$/.test(loginCode)) {
-    return {
-      ok: false,
-      message: "ログインコードは4桁の数字で入力してください。",
-    };
+  try {
+    if (!await allowAuthAttempt("register")) return { ok: false, message: "登録の試行回数が上限に達しました。時間をおいてお試しください。" };
+  } catch {
+    return { ok: false, message: "ただいま登録できません。時間をおいてお試しください。" };
   }
+  const groupId = process.env.APP_GROUP_ID;
+  if (!groupId) return { ok: false, message: "登録先の設定を確認できません。管理者へお問い合わせください。" };
 
   const { data: group, error: groupError } = await supabase
     .from("groups")
     .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
+    .eq("id", groupId)
     .maybeSingle();
 
   if (groupError) {
@@ -100,14 +102,14 @@ export async function registerMember(
     };
   }
 
-  const { error: insertError } = await supabase.from("profiles").insert({
+  const { data: inserted, error: insertError } = await supabase.from("profiles").insert({
     group_id: group.id,
     role: "user",
     name,
     email,
-    login_code: loginCode,
     login_enabled: false,
-  });
+    account_status: "pending",
+  }).select("id").single();
 
   if (insertError) {
     if (isDuplicateNameError(insertError)) {
@@ -123,8 +125,8 @@ export async function registerMember(
     };
   }
 
-  return {
-    ok: true,
-    message: "登録を受け付けました。管理者の承認後にログインできます。",
-  };
+  if (inserted) {
+    try { await notifyRegistration(inserted.id, name, email); } catch { /* 申請を保存した状態で再送できるようにする。 */ }
+  }
+  redirect("/register/thanks");
 }

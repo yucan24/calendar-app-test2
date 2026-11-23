@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 const FEEDBACK_EMAIL = "bbstatus@gmail.com";
 
 const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 const categoryLabels: Record<string, string> = {
   usability: "操作性",
@@ -31,7 +31,7 @@ function buildMailto(formData: FormData) {
   const categoryLabel = categoryLabels[category] ?? "その他";
   const urgencyLabel = urgencyLabels[urgency] ?? "通常";
 
-  const subject = `【calendar-app-test2】${categoryLabel}のご意見`;
+  const subject = `【NSCT-U15BBC webapp】${categoryLabel}のご意見`;
   const body = [
     `種類：${categoryLabel}`,
     `優先度：${urgencyLabel}`,
@@ -69,7 +69,7 @@ export default function FeedbackForm() {
       <fieldset>
         <legend className="block text-sm font-bold text-gray-900">優先度</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <label className="flex min-h-11 items-center justify-center rounded border border-gray-400 bg-white px-3 py-2 text-sm font-bold text-gray-900 has-checked:border-black has-checked:bg-black has-checked:text-white">
+          <label className="ui-choice">
             <input
               type="radio"
               name="urgency"
@@ -79,7 +79,7 @@ export default function FeedbackForm() {
             />
             通常
           </label>
-          <label className="flex min-h-11 items-center justify-center rounded border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800 has-checked:border-orange-600 has-checked:bg-orange-600 has-checked:text-white">
+          <label className="ui-choice">
             <input
               type="radio"
               name="urgency"
@@ -117,7 +117,7 @@ export default function FeedbackForm() {
 
       <button
         type="submit"
-        className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+        className="ui-button ui-button-primary w-full"
       >
         送信
       </button>

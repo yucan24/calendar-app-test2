@@ -1,9 +1,12 @@
-import Link from "next/link";
-import { revalidatePath } from "next/cache";
+import BackLink from "@/components/ui/BackLink";
+import PageHeader from "@/components/ui/PageHeader";
+import { getJstDateKey } from "@/lib/month";
+
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireUser } from "@/lib/auth";
 import SubmitButton from "@/components/SubmitButton";
+import { submitResponse } from "./actions";
 
 type PageProps = {
   params: Promise<{
@@ -42,57 +45,6 @@ function statusClass(status: string | null | undefined) {
   return "bg-gray-100 text-gray-600";
 }
 
-async function submitResponse(formData: FormData) {
-  "use server";
-
-  const eventId = String(formData.get("event_id"));
-  const userId = String(formData.get("user_id"));
-  const status = String(formData.get("status") ?? "");
-  const note = String(formData.get("note") ?? "");
-
-  if (!eventId || !userId) {
-    throw new Error("必須項目が不足しています");
-  }
-
-  // 未回答に戻す場合は、回答レコードを削除する
-  if (!status) {
-    const { error } = await supabase
-      .from("event_responses")
-      .delete()
-      .eq("event_id", eventId)
-      .eq("user_id", userId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    revalidatePath(`/user/calendar/${eventId}`);
-    revalidatePath("/user/calendar");
-    redirect(`/user/calendar/${eventId}`);
-  }
-
-  const { error } = await supabase.from("event_responses").upsert(
-    {
-      event_id: eventId,
-      user_id: userId,
-      status,
-      note,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "event_id,user_id",
-    }
-  );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath(`/user/calendar/${eventId}`);
-  revalidatePath("/user/calendar");
-  redirect(`/user/calendar/${eventId}`);
-}
-
 export default async function UserCalendarDetailPage({ params }: PageProps) {
   const { id } = await params;
 
@@ -108,20 +60,15 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
 
   if (eventError || !event) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="ui-page">
         <div className="mx-auto max-w-2xl">
-          <h1 className="text-2xl font-bold">予定詳細</h1>
+          <PageHeader title={<>予定詳細</>} backHref="/user/calendar" backLabel="カレンダーに戻る" />
 
           <p className="mt-6 rounded bg-red-100 p-4 text-red-700">
             予定が見つかりません。
           </p>
 
-          <Link
-            href="/user/calendar"
-            className="mt-6 inline-block rounded border bg-white px-4 py-2"
-          >
-            カレンダーに戻る
-          </Link>
+
         </div>
       </main>
     );
@@ -153,29 +100,14 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
   };
 
   const myResponse = response as EventResponse | null;
-  const eventYear = new Date(event.start_at).getFullYear();
-  const eventMonth = new Date(event.start_at).getMonth() + 1;
+  const eventMonth = getJstDateKey(event.start_at).slice(0, 7);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-2xl">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">予定詳細</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              {currentUser.name} さんでログイン中
-            </p>
-          </div>
+        <PageHeader title={<>予定詳細</>} backHref={`/user/calendar?month=${eventMonth}`} backLabel="カレンダーに戻る" />
 
-          <Link
-            href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
-            className="rounded border bg-white px-4 py-2 text-center"
-          >
-            カレンダーに戻る
-          </Link>
-        </div>
-
-        <section className="mt-6 rounded-lg bg-white p-6 shadow">
+        <section className="ui-card mt-6">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm text-gray-600">
               {formatDate(event.start_at)}
@@ -201,7 +133,7 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
           </div>
 
           <h2
-            className="mt-3 text-2xl font-bold"
+            className="ui-section-title mt-3"
             style={{ color: event.title_color || "#000000" }}
           >
             {event.title}
@@ -262,19 +194,18 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
         </section>
 
         {event.attendance_required && (
-          <section className="mt-6 rounded-lg bg-white p-6 shadow">
-            <h2 className="text-lg font-bold">回答する</h2>
+          <section className="ui-card mt-6">
+            <h2 className="ui-section-title">回答する</h2>
 
             <form action={submitResponse} className="mt-4 space-y-4">
               <input type="hidden" name="event_id" value={event.id} />
-              <input type="hidden" name="user_id" value={currentUser.id} />
 
               <div>
                 <label className="block text-sm font-medium">出欠</label>
                 <select
                   name="status"
                   defaultValue={myResponse?.status ?? ""}
-                  className="mt-1 w-full rounded border px-3 py-2"
+                  className="ui-field mt-1 w-full"
                 >
                   <option value="">未回答</option>
                   <option value="attend">〇 出席</option>
@@ -288,24 +219,19 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
                 <textarea
                   name="note"
                   defaultValue={myResponse?.note ?? ""}
-                  className="mt-1 w-full rounded border px-3 py-2"
+                  className="ui-field mt-1 w-full"
                   placeholder="遅刻、早退、欠席理由など"
                 />
               </div>
 
-              <SubmitButton className="rounded bg-black px-4 py-2 text-white">
+              <SubmitButton className="ui-button ui-button-primary">
                 回答を保存
               </SubmitButton>
             </form>
           </section>
         )}
 
-        <Link
-          href={`/user/calendar?year=${eventYear}&month=${eventMonth}`}
-          className="mt-6 inline-block rounded border bg-white px-4 py-2"
-        >
-          戻る
-        </Link>
+        <BackLink href={`/user/calendar?month=${eventMonth}`}>カレンダーに戻る</BackLink>
       </div>
     </main>
   );

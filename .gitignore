@@ -6,3 +6,17 @@ tsconfig.tsbuildinfo
 .env.local
 .env.*.local
 .vercel
+
+# 実データを含む銀行CSV
+533024*.csv
+.env*
+!.env.example
+!.env.production.example
+
+# 実名・勤務時間・会計資料を含むテスト用原本
+testdata/
+
+# 暗号化バックアップ・復号鍵・復元用の個人情報
+.backups/
+.backup-secrets/
+*.nsct-backup

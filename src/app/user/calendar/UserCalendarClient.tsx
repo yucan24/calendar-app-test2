@@ -1,5 +1,13 @@
 "use client";
 
+import MonthNavigation from "@/components/ui/MonthNavigation";
+
+
+import PageHeader from "@/components/ui/PageHeader";
+
+
+import LogoutButton from "@/components/LogoutButton";
+
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
@@ -67,7 +75,7 @@ type Props = {
 };
 
 const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
@@ -395,7 +403,7 @@ export default function UserCalendarClient({
 
   if (!currentUser) {
     return (
-      <main className="min-h-screen bg-gray-50 p-4 text-gray-900">
+      <main className="ui-page">
         <p className="rounded bg-white p-4 font-bold text-red-700 shadow">
           ログイン情報が見つかりません。
         </p>
@@ -693,7 +701,7 @@ function renderEventBlock(event: CalendarEvent) {
 
   return (
     <div key={event.id} className="text-center">
-      <div style={calendarTextStyle(event.title, event.title_color)}>
+      <div className="ui-calendar-event-title" style={calendarTextStyle(event.title, event.title_color)}>
         {displayText(event.title)}
       </div>
 
@@ -744,7 +752,7 @@ function renderEventBlock(event: CalendarEvent) {
     const playerNames = getParticipants(event.id, "user");
 
     return (
-      <section className="mt-5 rounded border border-gray-300 bg-white p-4">
+      <section className="ui-card mt-5">
         <h3 className="text-lg font-bold text-gray-900">{event.title}</h3>
 
         {event.location && (
@@ -833,7 +841,7 @@ function renderEventBlock(event: CalendarEvent) {
               <SubmitButton
                 busy={isPending}
                 pendingText="保存中..."
-                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                className="ui-button ui-button-primary w-full"
               >
                 出欠を保存
               </SubmitButton>
@@ -884,7 +892,7 @@ function renderEventBlock(event: CalendarEvent) {
       <>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="ui-section-title text-gray-900">
               {formatDate(selectedDateKey)}
             </h2>
             <p className="mt-1 text-sm font-medium text-gray-700">
@@ -895,8 +903,8 @@ function renderEventBlock(event: CalendarEvent) {
           <button
             type="button"
             onClick={closeSingleModal}
-            className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
-          >
+            className="ui-icon-button"
+           aria-label="閉じる">
             ×
           </button>
         </div>
@@ -912,7 +920,7 @@ function renderEventBlock(event: CalendarEvent) {
             この日の予定はありません。
           </p>
         ) : (
-          <section className="mt-5 rounded border border-gray-300 bg-white p-4">
+          <section className="ui-card mt-5">
             <h3 className="font-bold text-gray-900">この日の予定</h3>
 
             <div className="mt-3 space-y-2">
@@ -977,60 +985,17 @@ function renderEventBlock(event: CalendarEvent) {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-3 text-gray-900 sm:p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-              カレンダー
-            </h1>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              日付タップで予定確認・出欠回答、複数選択でまとめて出欠回答できます。
-            </p>
-          </div>
+        <PageHeader title="カレンダー" backHref="/user" actions={<LogoutButton />} />
 
-          <div className="flex gap-2">
-            <a
-              href="/user"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ユーザー画面に戻る
-            </a>
-            <a
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </a>
-          </div>
-        </div>
-
-        <section className="mt-5 rounded-lg bg-white p-4 shadow">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-bold text-gray-900">
+        <section className="ui-card mt-5">
+          <div className="ui-calendar-controls flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="ui-section-title text-gray-900">
               {formatTargetMonth(targetMonth)}
             </h2>
 
-            <div className="flex gap-2">
-              <a
-                href={`/user/calendar?month=${prevMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                前月
-              </a>
-              <a
-                href={`/user/calendar?month=${currentMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                今月
-              </a>
-              <a
-                href={`/user/calendar?month=${nextMonth}`}
-                className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-              >
-                翌月
-              </a>
-            </div>
+            <MonthNavigation baseHref="/user/calendar" previousMonth={prevMonth} currentMonth={currentMonth} nextMonth={nextMonth} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1039,8 +1004,8 @@ function renderEventBlock(event: CalendarEvent) {
               onClick={handleMultiSelectModeChange}
               className={
                 isMultiSelectMode
-                  ? "rounded bg-black px-4 py-2 font-bold text-white"
-                  : "rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+                  ? "ui-button ui-button-primary"
+                  : "ui-button ui-button-secondary"
               }
             >
               複数選択
@@ -1051,7 +1016,7 @@ function renderEventBlock(event: CalendarEvent) {
                 <button
                   type="button"
                   onClick={openBulkModal}
-                  className="rounded bg-yellow-400 px-4 py-2 font-bold text-gray-950"
+                  className="ui-button bg-yellow-400 text-white"
                 >
                   まとめて出欠回答
                 </button>
@@ -1059,7 +1024,7 @@ function renderEventBlock(event: CalendarEvent) {
                 <button
                   type="button"
                   onClick={clearSelectedDates}
-                  className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
+                  className="ui-button ui-button-secondary"
                 >
                   選択解除
                 </button>
@@ -1073,7 +1038,7 @@ function renderEventBlock(event: CalendarEvent) {
         </section>
 
         <section
-          className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          className="ui-calendar mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}
@@ -1179,19 +1144,19 @@ function renderEventBlock(event: CalendarEvent) {
       </div>
 
       {selectedDateKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
-          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+        <div className="ui-modal-backdrop">
+          <div className="ui-modal">
             {renderModalContents()}
           </div>
         </div>
       )}
 
       {isBulkModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
-          <div className="max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-md overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
+        <div className="ui-modal-backdrop">
+          <div className="ui-modal">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="ui-section-title text-gray-900">
                   まとめて出欠回答
                 </h2>
                 <p className="mt-1 text-sm font-medium text-gray-700">
@@ -1202,8 +1167,8 @@ function renderEventBlock(event: CalendarEvent) {
               <button
                 type="button"
                 onClick={closeBulkModal}
-                className="rounded bg-gray-200 px-3 py-1 font-bold text-gray-900"
-              >
+                className="ui-icon-button"
+               aria-label="閉じる">
                 ×
               </button>
             </div>
@@ -1274,7 +1239,7 @@ function renderEventBlock(event: CalendarEvent) {
               <SubmitButton
                 busy={isPending}
                 pendingText="保存中..."
-                className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                className="ui-button ui-button-primary w-full"
               >
                 選択日の予定にまとめて保存
               </SubmitButton>

@@ -1,20 +1,13 @@
-export default function RegisterThanksPage() {
-  return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-md rounded-lg bg-white p-6 shadow">
-        <h1 className="text-2xl font-bold">登録申請を受け付けました</h1>
+import Link from "next/link";
+import PageHeader from "@/components/ui/PageHeader";
+import { getCurrentProfile } from "@/lib/auth";
+import { getMenuPath } from "@/lib/navigation";
 
-        <p className="mt-4 text-sm text-gray-700">
-          管理者の承認が完了すると、ログインできるようになります。
-        </p>
-
-        <a
-          href="/login"
-          className="mt-6 inline-block rounded bg-black px-4 py-2 text-white"
-        >
-          ログイン画面へ
-        </a>
-      </div>
-    </main>
-  );
+export default async function RegisterThanksPage() {
+  const profile = await getCurrentProfile();
+  return <main className="ui-page"><div className="ui-card mx-auto max-w-md">
+    <span className="inline-block rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">承認待ち</span>
+    <PageHeader title="登録を申請しました" />
+    <Link href={profile ? getMenuPath(profile.role) : "/login"} className="ui-button ui-button-primary mt-6 block text-center">{profile ? "一覧に戻る" : "ログインへ"}</Link>
+  </div></main>;
 }

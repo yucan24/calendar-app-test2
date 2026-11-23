@@ -108,7 +108,7 @@ export default function BillingStatusButtons({
               aria-pressed={isActive}
               onClick={() => updateStatus(option.status)}
               className={[
-                "w-full rounded px-3 py-2 text-sm font-bold transition",
+                "ui-button ui-status-button w-full",
                 "disabled:pointer-events-none disabled:cursor-not-allowed",
                 isSaving
                   ? "bg-gray-200 text-gray-500 opacity-70"

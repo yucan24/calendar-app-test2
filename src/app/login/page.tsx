@@ -1,12 +1,17 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { authenticateLogin } from "@/lib/login";
+import { getCurrentProfile, markSessionChanged } from "@/lib/auth";
+import { sessionCookieName, SESSION_MAX_AGE } from "@/lib/session";
 import SubmitButton from "@/components/SubmitButton";
+import CodeInput from "@/components/CodeInput";
+import PageHeader from "@/components/ui/PageHeader";
 
 
 type PageProps = {
   searchParams?: Promise<{
     error?: string;
+    message?: string;
   }>;
 };
 
@@ -19,7 +24,7 @@ async function login(formData: FormData) {
 
   const loginCode = String(formData.get("login_code") ?? "").trim();
 
-  if (!name || !loginCode) {
+  if (!name || name.length > 100 || !loginCode) {
     redirect("/login?error=missing");
   }
 
@@ -27,34 +32,20 @@ async function login(formData: FormData) {
     redirect("/login?error=code");
   }
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id, role, login_enabled")
-    .eq("name", name)
-    .eq("login_code", loginCode)
-    .maybeSingle();
-
-  if (error || !profile) {
-    redirect("/login?error=failed");
-  }
-
-  if (!profile.login_enabled) {
-    redirect("/login?error=pending");
-  }
+  const result = await authenticateLogin(name, loginCode);
+  if (!result.ok) redirect(`/login?error=${result.reason}`);
 
   const cookieStore = await cookies();
 
-  cookieStore.set("profile_id", profile.id, {
+  cookieStore.delete("profile_id");
+  cookieStore.set(sessionCookieName(), result.token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: SESSION_MAX_AGE,
   });
-
-  if (profile.role === "admin") {
-    redirect("/admin");
-  }
+  await markSessionChanged();
 
   redirect("/user/payment-check");
 }
@@ -63,21 +54,23 @@ function errorMessage(error?: string) {
   if (error === "missing") return "名前と4桁コードを入力してください。";
   if (error === "code") return "4桁コードは数字4桁で入力してください。";
   if (error === "failed") return "名前または4桁コードが違います。";
-  if (error === "pending") return "管理者の承認が完了していません。";
+  if (error === "pending") return "このアカウントは現在ログインできません。承認・初期設定・利用状態を管理者に確認してください。";
+  if (error === "limited") return "ログインの試行回数が上限に達しました。時間をおいてお試しください。";
+  if (error === "unavailable") return "ただいまログインできません。時間をおいてお試しください。";
   return "";
 }
 
 export default async function LoginPage({ searchParams }: PageProps) {
+  const profile = await getCurrentProfile();
+  if (profile) redirect("/user/payment-check");
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const message = errorMessage(resolvedSearchParams?.error);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
-      <div className="mx-auto max-w-md">
-        <h1 className="text-3xl font-bold text-gray-900">ログイン</h1>
-        <p className="mt-3 text-base font-medium text-gray-700">
-          名前と4桁コードを入力してください。
-        </p>
+    <main className="ui-page">
+      <div className="mx-auto max-w-lg">
+        <PageHeader title="ログイン" />
+        {resolvedSearchParams?.message === "account-changed" && <p className="mt-4 rounded bg-green-100 p-3">ログイン情報を変更しました</p>}
 
         {message && (
           <div className="mt-6 rounded bg-red-100 p-4 font-bold text-red-700">
@@ -85,51 +78,36 @@ export default async function LoginPage({ searchParams }: PageProps) {
           </div>
         )}
 
+        <section aria-labelledby="new-member-heading" className="ui-card mt-6">
+          <h2 id="new-member-heading" className="ui-section-title text-blue-950">はじめて利用する方</h2>
+          <a href="/register" className="ui-button ui-button-primary mt-4 block text-center">新規登録</a>
+        </section>
+
         <form
           action={login}
-          className="mt-6 space-y-5 rounded-lg bg-white p-6 shadow"
+          className="ui-card mt-6 space-y-5"
         >
+          <h2 className="ui-section-title">登録済みの方はこちら</h2>
           <div>
-            <label className="block text-sm font-bold text-gray-900">名前</label>
+            <label htmlFor="login-name" className="block text-sm font-bold text-gray-900">名前</label>
             <input
+              id="login-name"
               name="name"
               required
-              className="mt-1 w-full rounded border border-gray-400 bg-white px-3 py-3 text-base text-gray-900 placeholder:text-gray-500"
+              className="ui-field mt-1 w-full placeholder:text-gray-500"
               placeholder="例：山田太郎"
             />
-            <p className="mt-1 text-xs font-medium text-gray-700">
-              空白は自動で削除されます。
-            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-gray-900">
-              4桁コード
-            </label>
-            <input
-              name="login_code"
-              required
-              inputMode="numeric"
-              maxLength={4}
-              className="mt-1 w-full rounded border border-gray-400 bg-white px-3 py-3 text-base text-gray-900 placeholder:text-gray-500"
-              placeholder="例：1234"
-            />
-          </div>
+          <CodeInput name="login_code" label="4桁コード" />
+          <a href="/login/forgot-password" className="block text-sm underline">4桁コードを忘れた場合</a>
           <SubmitButton
             pendingText="ログイン中..."
-            className="w-full rounded bg-black px-4 py-3 text-lg font-bold text-white"
+            className="ui-button ui-button-primary w-full"
           >
             ログイン
           </SubmitButton>
 
-          <div className="pt-4 text-center">
-            <a
-              href="/register"
-              className="text-base font-bold text-gray-800 underline"
-            >
-              会員登録はこちら
-            </a>
-          </div>
         </form>
       </div>
     </main>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
+import { isValidDate } from "@/lib/month";
 import { requireAdmin } from "@/lib/auth";
 
 type AttendanceStatus = "attend" | "absent" | "pending";
@@ -128,7 +129,7 @@ function validateStatus(value: string): AttendanceStatus {
 }
 
 function isValidDateKey(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return isValidDate(value);
 }
 
 function toUtcISOStringFromDateKey(dateKey: string) {

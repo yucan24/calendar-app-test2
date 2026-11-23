@@ -1,10 +1,12 @@
-import Link from "next/link";
-import { revalidatePath } from "next/cache";
+import PageHeader from "@/components/ui/PageHeader";
+import { getJstDateKey } from "@/lib/month";
+
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { requireAdmin } from "@/lib/auth";
 import SubmitButton from "@/components/SubmitButton";
 import AdminAttendanceSelect from "./AdminAttendanceSelect";
+import { updateEvent, deleteEvent } from "./actions";
 
 type PageProps = {
   params: Promise<{
@@ -26,21 +28,6 @@ type EventResponse = {
   note: string | null;
 };
 
-function toDateKey(value: string | null) {
-  if (!value) return "";
-
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function toUtcISOStringFromDateKey(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00+09:00`).toISOString();
-}
-
 function formatDate(value: string | null) {
   if (!value) return "未設定";
 
@@ -48,11 +35,6 @@ function formatDate(value: string | null) {
     dateStyle: "full",
     timeZone: "Asia/Tokyo",
   }).format(new Date(value));
-}
-
-function safeColor(value: FormDataEntryValue | null, fallback = "#000000") {
-  const text = String(value || "").trim();
-  return /^#[0-9a-fA-F]{6}$/.test(text) ? text : fallback;
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -80,84 +62,6 @@ function createSummary(
   };
 }
 
-async function updateEvent(formData: FormData) {
-  "use server";
-
-  const id = String(formData.get("id"));
-  const date = String(formData.get("date"));
-  const title = String(formData.get("title"));
-  const description = String(formData.get("description") ?? "");
-  const location = String(formData.get("location") ?? "");
-  const timeText = String(formData.get("time_text") ?? "");
-  const isHoliday = formData.get("is_holiday") === "on";
-  const isPeriod = formData.get("display_type_period") === "on";
-
-  const attendanceRequired = isPeriod
-    ? false
-    : formData.get("attendance_required") === "on";
-
-  const displayType = isPeriod ? "period" : "normal";
-
-  const titleColor = safeColor(formData.get("title_color"));
-  const locationColor = safeColor(formData.get("location_color"));
-  const timeColor = safeColor(formData.get("time_color"));
-
-  if (!id || !date || !title) {
-    throw new Error("必須項目が不足しています");
-  }
-
-  const startAt = toUtcISOStringFromDateKey(date);
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .update({
-      title,
-      description,
-      location,
-      time_text: timeText,
-      start_at: startAt,
-      end_at: null,
-      is_holiday: isHoliday,
-      title_color: titleColor,
-      location_color: locationColor,
-      time_color: timeColor,
-      attendance_required: attendanceRequired,
-      display_type: displayType,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath(`/admin/calendar/${id}`);
-  revalidatePath("/admin/calendar");
-  redirect(`/admin/calendar/${id}`);
-}
-
-async function deleteEvent(formData: FormData) {
-  "use server";
-
-  const id = String(formData.get("id"));
-
-  if (!id) {
-    throw new Error("削除対象が不明です");
-  }
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/calendar");
-  redirect("/admin/calendar");
-}
-
 export default async function AdminCalendarDetailPage({ params }: PageProps) {
   const { id } = await params;
 
@@ -173,20 +77,15 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
 
   if (eventError || !event) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="ui-page">
         <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold">予定詳細</h1>
+          <PageHeader title={<>予定詳細</>} backHref="/admin/calendar" backLabel="カレンダーに戻る" />
 
           <p className="mt-6 rounded bg-red-100 p-4 text-red-700">
             予定が見つかりません。
           </p>
 
-          <Link
-            href="/admin/calendar"
-            className="mt-6 inline-block rounded border bg-white px-4 py-2"
-          >
-            カレンダーに戻る
-          </Link>
+
         </div>
       </main>
     );
@@ -195,6 +94,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
   if (event.group_id !== currentAdmin.group_id) {
     redirect("/admin/calendar");
   }
+
+  const eventDate = getJstDateKey(event.start_at);
 
   const { data: profiles } = await supabase
     .from("profiles")
@@ -210,20 +111,15 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
 
   if (responsesError) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="ui-page">
         <div className="mx-auto max-w-4xl">
-          <h1 className="text-2xl font-bold">予定詳細</h1>
+          <PageHeader title={<>予定詳細</>} backHref={`/admin/calendar?month=${eventDate.slice(0, 7)}&date=${eventDate}`} backLabel="カレンダーに戻る" />
 
           <p className="mt-6 rounded bg-red-100 p-4 text-red-700">
             出欠取得エラー：{responsesError.message}
           </p>
 
-          <Link
-            href="/admin/calendar"
-            className="mt-6 inline-block rounded border bg-white px-4 py-2"
-          >
-            カレンダーに戻る
-          </Link>
+
         </div>
       </main>
     );
@@ -251,30 +147,13 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
     (response) => response.user_id === currentAdmin.id
   );
 
-  const eventDate = toDateKey(event.start_at);
-  const eventYear = new Date(event.start_at).getFullYear();
-  const eventMonth = new Date(event.start_at).getMonth() + 1;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-4xl">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">予定詳細</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              {currentAdmin.name} さんでログイン中
-            </p>
-          </div>
+        <PageHeader title={<>予定詳細</>} backHref={`/admin/calendar?month=${eventDate.slice(0, 7)}&date=${eventDate}`} backLabel="カレンダーに戻る" />
 
-          <Link
-            href={`/admin/calendar?year=${eventYear}&month=${eventMonth}&date=${eventDate}`}
-            className="rounded border bg-white px-4 py-2 text-center"
-          >
-            カレンダーに戻る
-          </Link>
-        </div>
-
-        <section className="mt-6 rounded-lg bg-white p-6 shadow">
+        <section className="ui-card mt-6">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm text-gray-600">
               {formatDate(event.start_at)}
@@ -300,7 +179,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
           </div>
 
           <h2
-            className="mt-3 text-2xl font-bold"
+            className="ui-section-title mt-3"
             style={{ color: event.title_color || "#000000" }}
           >
             {event.title}
@@ -328,8 +207,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
         </section>
 
         {event.attendance_required ? (
-          <section className="mt-8 rounded-lg bg-white p-6 shadow">
-            <h2 className="text-lg font-bold">自分の出欠回答</h2>
+          <section className="ui-card mt-8">
+            <h2 className="ui-section-title">自分の出欠回答</h2>
             <p className="mt-2 text-sm text-gray-600">
               指導者としての自分の回答です。
             </p>
@@ -354,8 +233,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
             </div>
           </section>
         ) : (
-          <section className="mt-8 rounded-lg bg-white p-6 shadow">
-            <h2 className="text-lg font-bold">出欠回答</h2>
+          <section className="ui-card mt-8">
+            <h2 className="ui-section-title">出欠回答</h2>
             <p className="mt-2 rounded bg-gray-50 p-4 text-sm text-gray-600">
               この予定は出欠回答不要です。
             </p>
@@ -364,8 +243,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
 
         {event.attendance_required && (
           <section className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg bg-white p-5 shadow">
-              <h2 className="text-lg font-bold">指導者 集計</h2>
+            <div className="ui-card">
+              <h2 className="ui-section-title">指導者 集計</h2>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center text-sm">
                 <div className="rounded bg-green-100 p-2 text-green-800">
                   <p>出席</p>
@@ -386,8 +265,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            <div className="rounded-lg bg-white p-5 shadow">
-              <h2 className="text-lg font-bold">選手 集計</h2>
+            <div className="ui-card">
+              <h2 className="ui-section-title">選手 集計</h2>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center text-sm">
                 <div className="rounded bg-green-100 p-2 text-green-800">
                   <p>出席</p>
@@ -410,8 +289,8 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
           </section>
         )}
 
-        <section className="mt-8 rounded-lg bg-white p-6 shadow">
-          <h2 className="text-lg font-bold">予定を編集</h2>
+        <section className="ui-card mt-8">
+          <h2 className="ui-section-title">予定を編集</h2>
 
           <form action={updateEvent} className="mt-4 space-y-4">
             <input type="hidden" name="id" value={event.id} />
@@ -423,7 +302,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
                 type="date"
                 required
                 defaultValue={eventDate}
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="ui-field mt-1 w-full"
               />
             </div>
 
@@ -433,7 +312,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
                 name="title"
                 required
                 defaultValue={event.title}
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="ui-field mt-1 w-full"
                 placeholder="例：通常練習 / 試合 / 〇〇中テスト / OFF"
               />
             </div>
@@ -443,7 +322,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               <input
                 name="location"
                 defaultValue={event.location ?? ""}
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="ui-field mt-1 w-full"
                 placeholder="例：第一体育館"
               />
             </div>
@@ -453,7 +332,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               <input
                 name="time_text"
                 defaultValue={event.time_text ?? ""}
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="ui-field mt-1 w-full"
                 placeholder="例：AM / PM / 終日 / 9:00-12:00"
               />
             </div>
@@ -463,7 +342,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               <textarea
                 name="description"
                 defaultValue={event.description ?? ""}
-                className="mt-1 w-full rounded border px-3 py-2"
+                className="ui-field mt-1 w-full"
                 placeholder="例：基礎練習、試合形式、持ち物など"
               />
             </div>
@@ -514,7 +393,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
                         name="title_color"
                         type="color"
                         defaultValue={event.title_color || "#000000"}
-                        className="h-7 w-10 cursor-pointer border-0 bg-transparent p-0"
+                        className="ui-field h-7 w-10 cursor-pointer bg-transparent"
                       />
                     </label>
 
@@ -524,7 +403,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
                         name="location_color"
                         type="color"
                         defaultValue={event.location_color || "#000000"}
-                        className="h-7 w-10 cursor-pointer border-0 bg-transparent p-0"
+                        className="ui-field h-7 w-10 cursor-pointer bg-transparent"
                       />
                     </label>
 
@@ -534,7 +413,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
                         name="time_color"
                         type="color"
                         defaultValue={event.time_color || "#000000"}
-                        className="h-7 w-10 cursor-pointer border-0 bg-transparent p-0"
+                        className="ui-field h-7 w-10 cursor-pointer bg-transparent"
                       />
                     </label>
                   </div>
@@ -542,22 +421,22 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
               </div>
             </details>
 
-            <SubmitButton className="rounded bg-black px-4 py-2 text-white">
+            <SubmitButton className="ui-button ui-button-primary">
               更新する
             </SubmitButton>
           </form>
 
           <form action={deleteEvent} className="mt-4">
             <input type="hidden" name="id" value={event.id} />
-            <SubmitButton className="rounded border border-red-300 px-4 py-2 text-red-700">
+            <SubmitButton className="ui-button ui-button-danger">
               この予定を削除
             </SubmitButton>
           </form>
         </section>
 
         {event.attendance_required && (
-          <section className="mt-8 rounded-lg bg-white p-6 shadow">
-            <h2 className="text-lg font-bold">出欠一覧</h2>
+          <section className="ui-card mt-8">
+            <h2 className="ui-section-title">出欠一覧</h2>
             <p className="mt-2 text-sm text-gray-600">
               管理者のみ、誰がどう回答しているか確認できます。
             </p>

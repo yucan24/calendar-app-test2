@@ -1,7 +1,13 @@
+import PageHeader from "@/components/ui/PageHeader";
+import LogoutButton from "@/components/LogoutButton";
 import { requireAdmin } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+
 import SubmitButton from "@/components/SubmitButton";
 import BillingStatusButtons from "./BillingStatusButtons";
+import BillingReminderPanel from "./BillingReminderPanel";
+import { fetchAllRows } from "@/lib/pagination";
+import { accountStatusLabels } from "@/lib/accountPolicy";
 
 import {
   createBillingItem,
@@ -26,6 +32,7 @@ type Profile = {
   name: string;
   email: string;
   role: "admin" | "user";
+  account_status: string;
 };
 
 type BillingItem = {
@@ -41,7 +48,7 @@ type BillingItem = {
 };
 
 const fieldClass =
-  "mt-1 block w-full min-w-0 max-w-full box-border rounded border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500";
+  "ui-field mt-1";
 
 const REFUND_TITLE = "返金";
 
@@ -82,26 +89,6 @@ function statusClass(status: string, itemType: "charge" | "refund") {
   return "bg-red-100 text-red-800";
 }
 
-function buildReminderMailto(unpaidUsers: Profile[]) {
-  const emails = unpaidUsers
-    .map((user) => user.email)
-    .filter(Boolean)
-    .join(",");
-
-  const subject = "未払い項目のご確認";
-  const body = [
-    "未払い項目があります。",
-    "",
-    "アプリにログインし、未払い金額と内訳をご確認ください。",
-    "",
-    "行き違いでお支払い済みの場合はご容赦ください。",
-  ].join("\n");
-
-  return `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(
-    subject
-  )}&body=${encodeURIComponent(body)}`;
-}
-
 export default async function AdminUsersPage({ searchParams }: PageProps) {
   const admin = await requireAdmin();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -113,32 +100,31 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       ? resolvedSearchParams.month
       : currentMonth;
 
-  const { data: users, error: usersError } = await supabase
+  const { data: users, error: usersError } = await fetchAllRows<Profile>((from, to) => supabase
     .from("profiles")
-    .select("id, name, email, role")
+    .select("id, name, email, role, account_status")
     .eq("group_id", admin.group_id)
-    .eq("role", "user")
-    .eq("login_enabled", true)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true }).order("id").range(from, to));
 
   if (usersError) {
     throw new Error(usersError.message);
   }
 
-  const userList = (users ?? []) as Profile[];
+  const allUsers = (users ?? []) as Profile[];
+  const userList = allUsers;
   const userIds = userList.map((user) => user.id);
 
   const { data: billingItems, error: billingError } =
     userIds.length > 0
-      ? await supabase
-          .from("billing_items")
-          .select(
-            "id, user_id, target_month, category, title, amount, status, note, paid_at"
-          )
-          .eq("group_id", admin.group_id)
-          .in("user_id", userIds)
-          .order("target_month", { ascending: false })
-          .order("created_at", { ascending: false })
+      ? await fetchAllRows<BillingItem>((from, to) => supabase
+        .from("billing_items")
+        .select(
+          "id, user_id, target_month, category, title, amount, status, note, paid_at"
+        )
+        .eq("group_id", admin.group_id)
+        .in("user_id", userIds)
+        .order("target_month", { ascending: false })
+        .order("created_at", { ascending: false }).order("id").range(from, to))
       : { data: [], error: null };
 
   if (billingError) {
@@ -146,6 +132,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   }
 
   const itemList = (billingItems ?? []) as BillingItem[];
+  const listedUsers = userList.filter(user => (user.role === "user" && user.account_status === "active") || itemList.some(item => item.user_id === user.id));
 
   const itemsByUser = new Map<string, BillingItem[]>();
 
@@ -159,46 +146,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     itemsByUser.set(item.user_id, list);
   }
 
-  const unpaidUsers = userList.filter((user) => {
-    const items = itemsByUser.get(user.id) ?? [];
-    return items.some(
-      (item) =>
-        item.status === "unpaid" && item.amount > 0 && !isRefundItem(item)
-    );
-  });
-
-  const reminderHref = buildReminderMailto(unpaidUsers);
-
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
+    <main className="ui-page">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              ユーザー・請求管理
-            </h1>
-            <p className="mt-2 text-sm font-medium text-gray-700">
-              月謝、遠征費、その他費用の未払い状況を管理します。
-            </p>
-          </div>
+        <PageHeader title="ユーザー・請求管理" backHref="/admin" actions={<LogoutButton />} />
 
-          <div className="flex gap-2">
-            <a
-              href="/admin"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              管理者画面に戻る
-            </a>
-            <a
-              href="/logout"
-              className="rounded border border-gray-400 bg-white px-4 py-2 font-bold text-gray-900"
-            >
-              ログアウト
-            </a>
-          </div>
-        </div>
-
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
+        <section className="ui-card mt-6">
           <details>
             <summary className="cursor-pointer text-lg font-bold text-gray-900">
               月謝を一括請求
@@ -241,7 +194,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <div className="flex min-w-0 items-end">
                 <SubmitButton
                   pendingText="一括作成中..."
-                  className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                  className="ui-button ui-button-primary w-full"
                 >
                   一括作成
                 </SubmitButton>
@@ -261,37 +214,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           </details>
         </section>
 
-        <section className="mt-6 rounded-lg bg-white p-5 shadow">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                未払い者への督促
-              </h2>
-              <p className="mt-1 text-sm font-medium text-gray-700">
-                未払いがあるユーザー：{unpaidUsers.length}名
-              </p>
-            </div>
-
-            {unpaidUsers.length > 0 ? (
-              <a
-                href={reminderHref}
-                className="rounded bg-orange-500 px-4 py-3 text-center font-bold text-white"
-              >
-                未払い者にまとめて督促メール
-              </a>
-            ) : (
-              <button
-                disabled
-                className="rounded bg-gray-200 px-4 py-3 font-bold text-gray-600"
-              >
-                未払い者なし
-              </button>
-            )}
-          </div>
-        </section>
+        <BillingReminderPanel targetMonth={targetMonth} />
 
         <section className="mt-6 space-y-4">
-          {userList.map((user) => {
+          {listedUsers.map((user) => {
             const items = itemsByUser.get(user.id) ?? [];
             const unpaidItems = items.filter(
               (item) => item.status === "unpaid" && !isRefundItem(item)
@@ -319,11 +245,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
             );
 
             return (
-              <article key={user.id} className="rounded-lg bg-white p-5 shadow">
+              <article key={user.id} className="ui-card">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
+                    <h2 className="ui-section-title text-gray-900">
                       {user.name}
+                      {user.account_status !== "active" && <span className="ml-2 text-sm">（{accountStatusLabels[user.account_status]}・履歴参照）</span>}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-gray-700">
                       {user.email}
@@ -382,7 +309,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                     請求項目を管理
                   </summary>
 
-                  <div className="mt-4 rounded bg-white p-4">
+                  {user.account_status === "active" && <div className="mt-4 rounded bg-white p-4">
                     <h3 className="font-bold text-gray-900">請求項目を追加</h3>
 
                     <form
@@ -418,7 +345,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                           <option value="uniform">ユニフォーム代</option>
                           <option value="other">その他</option>
                           <option value="refund">
-                            返金（管理者から保護者へ）
+                            返金
                           </option>
                         </select>
                       </div>
@@ -442,7 +369,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                       <div className="flex min-w-0 items-end">
                         <SubmitButton
                           pendingText="追加中・・・"
-                          className="w-full rounded bg-black px-4 py-3 font-bold text-white"
+                          className="ui-button ui-button-primary w-full"
                         >
                           追加
                         </SubmitButton>
@@ -459,7 +386,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         />
                       </div>
                     </form>
-                  </div>
+                  </div>}
 
                   <div className="mt-4">
                     <h3 className="font-bold text-gray-900">
@@ -583,7 +510,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                       </option>
                                       <option value="other">その他</option>
                                       <option value="refund">
-                                        返金（管理者から保護者へ）
+                                        返金
                                       </option>
                                     </select>
                                   </div>
@@ -605,7 +532,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                                   </div>
 
                                   <div className="flex min-w-0 items-end">
-                                    <SubmitButton className="w-full rounded bg-black px-4 py-3 font-bold text-white">
+                                    <SubmitButton className="ui-button ui-button-primary w-full">
                                       修正
                                     </SubmitButton>
                                   </div>

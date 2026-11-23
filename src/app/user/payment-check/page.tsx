@@ -1,5 +1,8 @@
+import LogoutButton from "@/components/LogoutButton";
+import PageHeader from "@/components/ui/PageHeader";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { getMenuPath } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   formatTargetMonth,
@@ -72,6 +75,7 @@ function historyStatusClass(item: BillingItem) {
 
 export default async function UserPaymentCheckPage() {
   const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const currentMonth = getCurrentTargetMonth();
   const recentTargetMonths = getRecentTargetMonths(currentMonth, 3);
 
@@ -116,14 +120,16 @@ export default async function UserPaymentCheckPage() {
   );
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-8">
+    <main className="ui-page">
+
       <div className="mx-auto max-w-md">
-        <section className="rounded-lg bg-white p-6 shadow">
-          <h1 className="text-2xl font-bold text-gray-900">
+        <PageHeader title="支払い確認" backHref={getMenuPath(user.role)} actions={<><Link href="/account" className="ui-button ui-button-secondary">アカウント設定</Link><LogoutButton /></>} />
+        <section className="ui-card">
+          <h2 className="ui-section-title text-gray-900">
             {items.length > 0
               ? "確認が必要な項目があります"
               : "未払い・未清算項目はありません"}
-          </h1>
+          </h2>
 
           {items.length === 0 && (
             <p className="mt-4 rounded bg-green-50 p-4 font-bold text-green-800">
@@ -164,7 +170,7 @@ export default async function UserPaymentCheckPage() {
 
           {paymentItems.length > 0 && (
             <div className="mt-6">
-              <h2 className="font-bold text-gray-900">未払い内訳</h2>
+              <h2 className="ui-section-title text-gray-900">未払い内訳</h2>
 
               <div className="mt-3 space-y-3">
                 {paymentItems.map((item) => (
@@ -197,7 +203,7 @@ export default async function UserPaymentCheckPage() {
 
           {refundItems.length > 0 && (
             <div className="mt-6">
-              <h2 className="font-bold text-gray-900">未清算返金内訳</h2>
+              <h2 className="ui-section-title text-gray-900">未清算返金内訳</h2>
 
               <div className="mt-3 space-y-3">
                 {refundItems.map((item) => (
@@ -229,10 +235,10 @@ export default async function UserPaymentCheckPage() {
           )}
 
           <Link
-            href="/user/calendar"
-            className="mt-6 block rounded bg-black px-4 py-3 text-center font-bold text-white"
+            href={isAdmin ? "/admin" : "/user/calendar"}
+            className="ui-button ui-button-primary mt-6 block text-center"
           >
-            確認してカレンダーへ進む
+            {isAdmin ? "確認して管理者画面へ進む" : "確認してカレンダーへ進む"}
           </Link>
 
           <p className="mt-4 text-sm font-medium text-gray-700">
@@ -240,8 +246,8 @@ export default async function UserPaymentCheckPage() {
           </p>
         </section>
 
-        <section className="mt-5 rounded-lg bg-white p-6 shadow">
-          <h2 className="text-lg font-bold text-gray-900">
+        <section id="payment-history" className="ui-card mt-5">
+          <h2 className="ui-section-title text-gray-900">
             直近3ヶ月の支払い・返金履歴
           </h2>
 
