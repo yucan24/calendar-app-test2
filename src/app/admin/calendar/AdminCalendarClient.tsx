@@ -19,6 +19,7 @@ import SubmitButton from "@/components/SubmitButton";
 import {
   createAdminCalendarEventFromModal,
   createAdminCalendarEventsForDates,
+  deleteAdminCalendarEventFromModal,
   updateAdminCalendarAttendance,
   updateAdminCalendarEventFromModal,
 } from "./actions";
@@ -691,6 +692,25 @@ function getResponseRows(eventId: string) {
     });
   }
 
+  function handleDeleteEvent(formData: FormData) {
+    if (actionLockRef.current) return;
+
+    const eventId = cleanText(formData.get("event_id"));
+    const event = events.find((item) => item.id === eventId);
+    if (!event || !window.confirm(`「${event.title}」を削除しますか？`)) return;
+
+    setErrorMessage("");
+    runLockedAction(async () => {
+      try {
+        await deleteAdminCalendarEventFromModal({ eventId });
+        closeSingleModal();
+        router.refresh();
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    });
+  }
+
   function handleBulkCreateEvents(formData: FormData) {
     setErrorMessage("");
 
@@ -950,7 +970,15 @@ function renderEventBlock(event: CalendarEvent) {
 
     return (
       <section className="ui-card mt-5">
-        <h3 className="text-lg font-bold text-gray-900">{event.title}</h3>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h3 className="min-w-0 break-words text-lg font-bold text-gray-900">{event.title}</h3>
+          <form action={handleDeleteEvent} className="shrink-0">
+            <input type="hidden" name="event_id" value={event.id} />
+            <SubmitButton busy={isPending} pendingText="削除中..." className="ui-button ui-button-danger">
+              予定を削除
+            </SubmitButton>
+          </form>
+        </div>
 
         {event.location && (
           <p className="mt-1 text-sm font-medium text-gray-700">

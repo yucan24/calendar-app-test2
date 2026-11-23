@@ -377,6 +377,26 @@ export async function updateAdminCalendarEventFromModal(input: EventInput) {
   revalidatePath("/user/calendar");
 }
 
+export async function deleteAdminCalendarEventFromModal(input: EventInput) {
+  const admin = await requireAdmin();
+  const eventId = getEventId(input);
+
+  await getEventOrThrow(eventId, admin.group_id);
+
+  const { error } = await supabase
+    .from("calendar_events")
+    .delete()
+    .eq("id", eventId)
+    .eq("group_id", admin.group_id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/calendar");
+  revalidatePath("/user/calendar");
+  revalidatePath(`/admin/calendar/${eventId}`);
+  revalidatePath(`/user/calendar/${eventId}`);
+}
+
 export async function createAdminCalendarEventsForDates(input: EventInput) {
   const admin = await requireAdmin();
 
