@@ -40,6 +40,50 @@ function request(cookieValues = {}) {
   return { auth, values, cookieWrites, mocks: { ...mocks, "@/lib/auth": auth } };
 }
 
+async function loginAction(current) {
+  const mocks = {
+    ...current.mocks,
+    '@/lib/authRateLimit': { allowAuthAttempt: async () => true },
+    '@/components/SubmitButton': () => null,
+    '@/components/CodeInput': () => null,
+  };
+  const page = await loadTs('src/app/login/page.tsx', mocks).default({});
+  function findAction(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.map(findAction).find(Boolean);
+    if (node.type === 'form' && typeof node.props.action === 'function') return node.props.action;
+    return findAction(node.props?.children);
+  }
+  const action = findAction(page);
+  assert.equal(typeof action, 'function');
+  return action;
+}
+
+test('両権限の実ログイン送信はセッションを発行し、支払い確認を経ても認証を維持する', async () => {
+  for (const role of ['admin', 'user']) {
+    const team = await member(role), current = request({ profile_id: 'legacy-cookie' });
+    const login = await loginAction(current);
+    await assert.rejects(login(form({ name: team.profile.name, login_code: '1234' })), /^Error: redirect:\/user\/payment-check$/);
+    const version = current.cookieWrites.find(item => item.name === session.sessionVersionCookieName());
+    assert.match(version.value, /^[a-f0-9-]{36}$/);
+    assert.equal(version.options.httpOnly, false);
+    assert.notEqual(version.value, current.values.get(session.sessionCookieName()));
+    assert.equal(current.values.has('profile_id'), false);
+    assert.equal((await current.auth.getCurrentProfile()).id, team.adminId);
+    assert.equal((await current.auth.requireUser()).role, role);
+    if (role === 'admin') assert.equal((await current.auth.requireAdmin()).id, team.adminId);
+  }
+});
+
+test('誤ったコードのログイン送信では支払い確認へ進まずセッションも発行しない', async () => {
+  const team = await member(), current = request();
+  const login = await loginAction(current);
+  await assert.rejects(login(form({ name: team.profile.name, login_code: '9999' })), /^Error: redirect:\/login\?error=failed$/);
+  assert.equal(await current.auth.getCurrentProfile(), null);
+  assert.equal(current.cookieWrites.length, 0);
+  assert.equal((await db.query('select count(*)::integer as n from app_sessions where profile_id=$1', [team.adminId])).rows[0].n, 0);
+});
+
 test("ログアウトURLのGET・先読みではログイン状態を失わない", async () => {
   const team = await member(), token = await signIn(team.profile);
   for (const headers of [{}, { RSC: "1", "Next-Router-Prefetch": "1", Purpose: "prefetch" }]) {
@@ -104,7 +148,9 @@ test("誤ったコード・未承認ではセッションを作らず、有効�
   const token = await signIn(team.profile);
   const current = request({ [session.sessionCookieName()]: token, profile_id: team.adminId });
   await current.auth.endSession();
-  assert.equal(current.values.size, 0);
+  assert.equal(current.values.has(session.sessionCookieName()), false);
+  assert.equal(current.values.has('profile_id'), false);
+  assert.match(current.values.get(session.sessionVersionCookieName()), /^[a-f0-9-]{36}$/);
   assert.equal(await request({ [session.sessionCookieName()]: token }).auth.getCurrentProfile(), null);
 });
 

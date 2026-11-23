@@ -349,7 +349,7 @@ test("[UI-04] 意見フォームは宛先を固定し、日本語と記号をmai
     Component().props.onSubmit({ preventDefault() { prevented = true; }, currentTarget: { category: "bug", urgency: "urgent", page_path: "/admin/accounting?a=1&b=2", message: "日本語 & ? # 改行\n次の行" } });
     const url = new URL(globalThis.window.location.href);
     assert.equal(prevented, true); assert.equal(url.protocol, "mailto:"); assert.equal(url.pathname, "bbstatus@gmail.com");
-    assert.equal(url.searchParams.get("subject"), "【calendar-app-test2】不具合のご意見");
+    assert.equal(url.searchParams.get("subject"), "【NSCT-U15BBC webapp】不具合のご意見");
     assert.ok(url.searchParams.get("body").includes("日本語 & ? # 改行\n次の行"));
     assert.ok(url.searchParams.get("body").includes("/admin/accounting?a=1&b=2"));
     assert.equal([...url.searchParams.keys()].length, 2);

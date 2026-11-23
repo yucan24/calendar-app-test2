@@ -44,7 +44,7 @@ export default function AccountingWorkspaceNav({ activeTab, targetMonth }: Props
   return (
     <nav
       aria-label="会計管理メニュー"
-      className="ui-tabs mt-6"
+      className="ui-tabs ui-workspace-tabs mt-6"
     >
       {tabs.map((tab) => {
         const selected = tab.id === activeTab;

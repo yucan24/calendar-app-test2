@@ -4,15 +4,14 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import SubmitButton from "@/components/SubmitButton";
 import { accountStatusLabels } from "@/lib/accountPolicy";
-import { performMemberAction } from "./actions";
 import MemberProfileForm from "./MemberProfileForm";
 import { filterMembers, memberFilters, type Member, type MemberNotice, type MemberListState } from "./memberView";
 
 const initialState: MemberListState = { ok: false, message: "" };
 const mailNames: Record<string, string> = { registration: "管理者への申請通知", approved: "承認のご案内", setup: "初期設定メール", reset: "再設定メール", admin_reset: "再設定メール", verify_email: "メール確認", email_change: "メール変更の確認" };
 
-export default function MemberManagement({ members, notices, adminId, testEnvironment, testInbox }: { members: Member[]; notices: MemberNotice[]; adminId: string; testEnvironment: boolean; testInbox: string }) {
-  const [state, action, pending] = useActionState(performMemberAction, initialState);
+export default function MemberManagement({ memberAction, members, notices, adminId, testEnvironment, testInbox }: { memberAction: (previous: MemberListState, form: FormData) => Promise<MemberListState>; members: Member[]; notices: MemberNotice[]; adminId: string; testEnvironment: boolean; testInbox: string }) {
+  const [state, action, pending] = useActionState(memberAction, initialState);
   const [filter, setFilter] = useState("all"), [search, setSearch] = useState("");
   const feedback = useRef<HTMLDivElement>(null);
   useEffect(() => { if (state.message) feedback.current?.focus(); }, [state]);

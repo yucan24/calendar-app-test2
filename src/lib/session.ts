@@ -6,6 +6,10 @@ export function sessionCookieName(nodeEnvironment = process.env.NODE_ENV) {
   return nodeEnvironment === "production" ? "__Host-nsct_session" : "nsct_session";
 }
 
+export function sessionVersionCookieName(nodeEnvironment = process.env.NODE_ENV) {
+  return nodeEnvironment === "production" ? "__Host-nsct_session_version" : "nsct_session_version";
+}
+
 export function createSessionToken() {
   return randomBytes(32).toString("hex");
 }

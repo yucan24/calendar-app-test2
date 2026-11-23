@@ -963,7 +963,7 @@ export default function AccountingReportClient({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+        <table className="ui-responsive-table w-full min-w-[980px] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[14%]" />
             <col className="w-[16%]" />
@@ -984,10 +984,10 @@ export default function AccountingReportClient({
           <tbody>
             {rows.map((row) => (
               <tr key={row.coachId} className="border-b border-gray-200">
-                <td className="break-words py-4 pr-3 align-top font-bold text-gray-900">
+                <td data-label="指導者" className="break-words py-4 pr-3 align-top font-bold text-gray-900">
                   {row.coachName}
                 </td>
-                <td className="px-3 py-4 align-top">
+                <td data-label="勤務" className="px-3 py-4 align-top">
                   <p className="font-bold text-gray-900">
                     {formatMinutes(row.totalWorkMinutes)}
                   </p>
@@ -996,7 +996,7 @@ export default function AccountingReportClient({
                     {formatMinutes(row.adminMinutes)}
                   </p>
                 </td>
-                <td className="px-3 py-4 text-right align-top">
+                <td data-label="報酬" className="px-3 py-4 text-right align-top">
                   <div className="ml-auto w-full max-w-[240px]">
                     <p className="font-bold text-gray-900">
                       {formatYen(row.grossReward)}
@@ -1032,10 +1032,10 @@ export default function AccountingReportClient({
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-4 text-right align-top font-bold text-orange-700">
+                <td data-label="源泉税" className="px-3 py-4 text-right align-top font-bold text-orange-700">
                   {formatYen(row.taxOfficePayment)}
                 </td>
-                <td className="py-4 pl-3 text-right align-top">
+                <td data-label="手取り" className="py-4 pl-3 text-right align-top">
                   <p
                     className={`text-lg font-bold ${balanceTextClass(
                       row.netPay
@@ -1141,11 +1141,10 @@ export default function AccountingReportClient({
             {formatTargetMonth(targetMonth)}
           </h2>
           <p className="mt-2 text-sm font-medium text-gray-700">
-            指導者別時給（未設定 {formatYen(COACH_HOURLY_RATE)} / 時間）、源泉税率{" "}
-            {formatTaxRate()}（支給報酬のみ）
+            時給：個別設定（標準 {formatYen(COACH_HOURLY_RATE)}）／源泉税 {formatTaxRate()}
           </p>
           <p className="mt-2 text-sm font-medium text-gray-700">
-            月謝は入金日ではなく請求対象月に集計します。未入金は含めず、後から支払い済みにすると過去月も更新されます。
+            集計：請求対象月・支払い済み
           </p>
         </div>
 

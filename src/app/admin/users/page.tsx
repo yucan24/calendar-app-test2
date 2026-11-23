@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 
 import SubmitButton from "@/components/SubmitButton";
 import BillingStatusButtons from "./BillingStatusButtons";
+import BillingReminderPanel from "./BillingReminderPanel";
+import { fetchAllRows } from "@/lib/pagination";
 import { accountStatusLabels } from "@/lib/accountPolicy";
 
 import {
@@ -87,26 +89,6 @@ function statusClass(status: string, itemType: "charge" | "refund") {
   return "bg-red-100 text-red-800";
 }
 
-function buildReminderMailto(unpaidUsers: Profile[]) {
-  const emails = unpaidUsers
-    .map((user) => user.email)
-    .filter(Boolean)
-    .join(",");
-
-  const subject = "未払い項目のご確認";
-  const body = [
-    "未払い項目があります。",
-    "",
-    "アプリにログインし、未払い金額と内訳をご確認ください。",
-    "",
-    "行き違いでお支払い済みの場合はご容赦ください。",
-  ].join("\n");
-
-  return `mailto:?bcc=${encodeURIComponent(emails)}&subject=${encodeURIComponent(
-    subject
-  )}&body=${encodeURIComponent(body)}`;
-}
-
 export default async function AdminUsersPage({ searchParams }: PageProps) {
   const admin = await requireAdmin();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -118,11 +100,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       ? resolvedSearchParams.month
       : currentMonth;
 
-  const { data: users, error: usersError } = await supabase
+  const { data: users, error: usersError } = await fetchAllRows<Profile>((from, to) => supabase
     .from("profiles")
     .select("id, name, email, role, account_status")
     .eq("group_id", admin.group_id)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true }).order("id").range(from, to));
 
   if (usersError) {
     throw new Error(usersError.message);
@@ -134,7 +116,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   const { data: billingItems, error: billingError } =
     userIds.length > 0
-      ? await supabase
+      ? await fetchAllRows<BillingItem>((from, to) => supabase
         .from("billing_items")
         .select(
           "id, user_id, target_month, category, title, amount, status, note, paid_at"
@@ -142,7 +124,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         .eq("group_id", admin.group_id)
         .in("user_id", userIds)
         .order("target_month", { ascending: false })
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false }).order("id").range(from, to))
       : { data: [], error: null };
 
   if (billingError) {
@@ -163,16 +145,6 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     list.push(item);
     itemsByUser.set(item.user_id, list);
   }
-
-  const unpaidUsers = userList.filter((user) => {
-    const items = itemsByUser.get(user.id) ?? [];
-    return items.some(
-      (item) =>
-        item.status === "unpaid" && item.amount > 0 && !isRefundItem(item)
-    );
-  });
-
-  const reminderHref = buildReminderMailto(unpaidUsers);
 
   return (
     <main className="ui-page">
@@ -242,34 +214,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           </details>
         </section>
 
-        <section className="ui-card mt-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="ui-section-title text-gray-900">
-                未払い者への督促
-              </h2>
-              <p className="mt-1 text-sm font-medium text-gray-700">
-                未払いがあるユーザー：{unpaidUsers.length}名
-              </p>
-            </div>
-
-            {unpaidUsers.length > 0 ? (
-              <a
-                href={reminderHref}
-                className="ui-button bg-orange-500 text-center text-white"
-              >
-                未払い者にまとめて督促メール
-              </a>
-            ) : (
-              <button
-                disabled
-                className="ui-button ui-button-secondary"
-              >
-                未払い者なし
-              </button>
-            )}
-          </div>
-        </section>
+        <BillingReminderPanel targetMonth={targetMonth} />
 
         <section className="mt-6 space-y-4">
           {listedUsers.map((user) => {

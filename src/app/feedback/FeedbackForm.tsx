@@ -31,7 +31,7 @@ function buildMailto(formData: FormData) {
   const categoryLabel = categoryLabels[category] ?? "その他";
   const urgencyLabel = urgencyLabels[urgency] ?? "通常";
 
-  const subject = `【calendar-app-test2】${categoryLabel}のご意見`;
+  const subject = `【NSCT-U15BBC webapp】${categoryLabel}のご意見`;
   const body = [
     `種類：${categoryLabel}`,
     `優先度：${urgencyLabel}`,

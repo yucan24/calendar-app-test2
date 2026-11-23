@@ -809,7 +809,7 @@ export default function CoachWorkCalendarClient({
   function renderEventBlock(event: CalendarEvent) {
     return (
       <div key={event.id} className="text-center">
-        <div style={calendarTextStyle(event.title, event.title_color)}>
+      <div className="ui-calendar-event-title" style={calendarTextStyle(event.title, event.title_color)}>
           {displayText(event.title)}
         </div>
 
@@ -875,7 +875,7 @@ export default function CoachWorkCalendarClient({
         <PageHeader title="指導者勤怠・立替管理" backHref="/admin" actions={<LogoutButton />} />
 
         <section className="ui-card mt-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="ui-calendar-controls flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="ui-section-title text-gray-900">
               {formatTargetMonth(targetMonth)}
             </h2>
@@ -923,7 +923,7 @@ export default function CoachWorkCalendarClient({
         </section>
 
         <section
-          className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          className="ui-calendar mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}

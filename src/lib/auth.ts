@@ -1,8 +1,9 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { sessionCookieName, hashSessionToken } from "@/lib/session";
+import { sessionCookieName, sessionVersionCookieName, SESSION_MAX_AGE, hashSessionToken } from "@/lib/session";
 
 export type CurrentProfile = {
   id: string;
@@ -45,6 +46,19 @@ export async function endSession() {
     expires: new Date(0),
   });
   cookieStore.delete("profile_id");
+  await markSessionChanged();
+}
+
+// This public nonce only synchronizes tabs; it never grants access to the app.
+export async function markSessionChanged() {
+  const cookieStore = await cookies();
+  cookieStore.set(sessionVersionCookieName(), randomUUID(), {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
 }
 
 export async function requireLogin() {

@@ -1,8 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticateLogin } from "@/lib/login";
-import { getCurrentProfile } from "@/lib/auth";
-import { getMenuPath } from "@/lib/navigation";
+import { getCurrentProfile, markSessionChanged } from "@/lib/auth";
 import { sessionCookieName, SESSION_MAX_AGE } from "@/lib/session";
 import SubmitButton from "@/components/SubmitButton";
 import CodeInput from "@/components/CodeInput";
@@ -46,10 +45,7 @@ async function login(formData: FormData) {
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });
-
-  if (result.role === "admin") {
-    redirect("/admin");
-  }
+  await markSessionChanged();
 
   redirect("/user/payment-check");
 }
@@ -66,7 +62,7 @@ function errorMessage(error?: string) {
 
 export default async function LoginPage({ searchParams }: PageProps) {
   const profile = await getCurrentProfile();
-  if (profile) redirect(getMenuPath(profile.role));
+  if (profile) redirect("/user/payment-check");
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const message = errorMessage(resolvedSearchParams?.error);
 

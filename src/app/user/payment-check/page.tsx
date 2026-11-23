@@ -2,6 +2,7 @@ import LogoutButton from "@/components/LogoutButton";
 import PageHeader from "@/components/ui/PageHeader";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { getMenuPath } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   formatTargetMonth,
@@ -74,6 +75,7 @@ function historyStatusClass(item: BillingItem) {
 
 export default async function UserPaymentCheckPage() {
   const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const currentMonth = getCurrentTargetMonth();
   const recentTargetMonths = getRecentTargetMonths(currentMonth, 3);
 
@@ -121,7 +123,7 @@ export default async function UserPaymentCheckPage() {
     <main className="ui-page">
 
       <div className="mx-auto max-w-md">
-        <PageHeader title="支払い確認" backHref="/user" actions={<><Link href="/account" className="ui-button ui-button-secondary">アカウント設定</Link><LogoutButton /></>} />
+        <PageHeader title="支払い確認" backHref={getMenuPath(user.role)} actions={<><Link href="/account" className="ui-button ui-button-secondary">アカウント設定</Link><LogoutButton /></>} />
         <section className="ui-card">
           <h2 className="ui-section-title text-gray-900">
             {items.length > 0
@@ -233,10 +235,10 @@ export default async function UserPaymentCheckPage() {
           )}
 
           <Link
-            href="/user/calendar"
+            href={isAdmin ? "/admin" : "/user/calendar"}
             className="ui-button ui-button-primary mt-6 block text-center"
           >
-            確認してカレンダーへ進む
+            {isAdmin ? "確認して管理者画面へ進む" : "確認してカレンダーへ進む"}
           </Link>
 
           <p className="mt-4 text-sm font-medium text-gray-700">

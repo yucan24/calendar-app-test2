@@ -738,7 +738,7 @@ function renderEventBlock(event: CalendarEvent) {
 
   return (
     <div key={event.id} className="text-center">
-      <div style={calendarTextStyle(event.title, event.title_color)}>
+      <div className="ui-calendar-event-title" style={calendarTextStyle(event.title, event.title_color)}>
         {displayText(event.title)}
       </div>
 
@@ -772,7 +772,7 @@ function renderEventBlock(event: CalendarEvent) {
           </span>
         </div>
 
-          <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
+          <div className="ui-calendar-event-counts mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
             <div>指導者:{summary.coachCount}人</div>
             <div>選手:{summary.playerCount}人</div>
           </div>
@@ -1252,7 +1252,7 @@ function renderEventBlock(event: CalendarEvent) {
         <PageHeader title="カレンダー" backHref="/admin" actions={<LogoutButton />} />
 
         <section className="ui-card mt-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="ui-calendar-controls flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="ui-section-title text-gray-900">
               {formatTargetMonth(targetMonth)}
             </h2>
@@ -1300,7 +1300,7 @@ function renderEventBlock(event: CalendarEvent) {
         </section>
 
         <section
-          className="mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          className="ui-calendar mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}

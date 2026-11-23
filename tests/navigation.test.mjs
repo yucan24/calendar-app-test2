@@ -123,7 +123,7 @@ test('復旧依頼からログイン中の会員は設定へ戻り、未ログ�
   }
 });
 
-test('ログイン済みでログインURLを開いても再入力を求めず一覧へ移動する', async () => {
+test('ログイン済みでログインURLを開くと両権限とも本人の支払い確認へ移動する', async () => {
   for (const profile of visitors) {
     const page = loadTs('src/app/login/page.tsx', {
       ...publicPageMocks(profile),
@@ -132,9 +132,103 @@ test('ログイン済みでログインURLを開いても再入力を求めず�
       '@/lib/login':{}, '@/lib/session':loadTs('src/lib/session.ts'),
       '@/components/SubmitButton':()=>null,
     }).default;
-    if (profile) await assert.rejects(page({}), new RegExp('^Error: redirect:'+(profile.role==='admin'?'/admin':'/user')+'$'));
+    if (profile) await assert.rejects(page({}), /^Error: redirect:\/user\/payment-check$/);
     else assert.ok(hrefs(await page({})).includes('/register'));
   }
+});
+
+test('アプリの入口は両権限とも支払い確認へ進み、未ログインならログインへ進む', async () => {
+  for (const profile of visitors) {
+    const page = loadTs('src/app/page.tsx', {
+      '@/lib/auth': { getCurrentProfile: async () => profile },
+      'next/navigation': { redirect(url) { throw Error('redirect:' + url); } },
+    }).default;
+    await assert.rejects(page(), profile ? /^Error: redirect:\/user\/payment-check$/ : /^Error: redirect:\/login$/);
+  }
+});
+
+function textContent(node) {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textContent).join(' ');
+  return textContent(node.props?.children);
+}
+
+function paymentPage(actor) {
+  return loadTs('src/app/user/payment-check/page.tsx', {
+    'next/link': () => null,
+    '@/components/LogoutButton': () => null,
+    '@/lib/auth': { requireUser: async () => actor },
+    '@/lib/supabase': { supabase: postgresClient(db) },
+    '@/lib/navigation': navigation,
+    '@/lib/month': month,
+  }).default;
+}
+
+test('管理者も一般会員も本人分だけの未払い・返金・履歴を表示し、権限に合う画面へ進める', async () => {
+  for (const role of ['admin', 'user']) {
+    const team = await createTeam(db), otherTeam = await createTeam(db);
+    await db.query('update profiles set role=$2 where id=$1', [team.adminId, role]);
+    const other = (await db.query("insert into profiles(group_id,name,role) values($1,$2,'user') returning id", [team.groupId, `同じチームの別会員-${team.groupId}`])).rows[0];
+    const currentMonth = month.getCurrentTargetMonth();
+    for (const [groupId, userId, amount, status, title, note] of [
+      [team.groupId, team.adminId, 1234, 'unpaid', '本人請求', '本人の未払いメモ'],
+      [team.groupId, team.adminId, 432, 'unpaid', '返金', '本人の返金メモ'],
+      [team.groupId, team.adminId, 777, 'paid', '本人の支払済み', '本人の支払済みメモ'],
+      [team.groupId, team.adminId, 888, 'exempt', '本人の免除', '本人の免除メモ'],
+      [team.groupId, other.id, 99998, 'unpaid', '他人の請求', '表示してはいけない同一チームの請求'],
+      [otherTeam.groupId, otherTeam.adminId, 99999, 'unpaid', '別チームの請求', '表示してはいけない別チームの請求'],
+    ]) await db.query('insert into billing_items(group_id,user_id,target_month,category,title,amount,status,note) values($1,$2,$3,\'trip\',$4,$5,$6,$7)', [groupId, userId, currentMonth, title, amount, status, note]);
+    const view = await paymentPage({ id: team.adminId, group_id: team.groupId, role })();
+    const text = textContent(view);
+    assert.ok(text.includes('未払い合計'));
+    assert.ok(text.includes(month.formatYen(1234)));
+    assert.ok(text.includes(month.formatYen(432)));
+    assert.ok(text.includes('本人の未払いメモ'));
+    assert.ok(text.includes('本人の返金メモ'));
+    assert.ok(text.includes('本人の支払済みメモ'));
+    assert.ok(text.includes('本人の免除メモ'));
+    assert.ok(!text.includes('表示してはいけない'));
+    assert.ok(!text.includes(month.formatYen(99998)));
+    assert.ok(!text.includes(month.formatYen(99999)));
+    const urls = hrefs(view);
+    assert.ok(urls.includes(role === 'admin' ? '/admin' : '/user'));
+    assert.equal(urls.includes('/user/calendar'), role === 'user');
+    assert.ok(text.includes(role === 'admin' ? '確認して管理者画面へ進む' : '確認してカレンダーへ進む'));
+    const rows = (await db.query('select status,amount from billing_items where user_id=$1 order by amount', [team.adminId])).rows;
+    assert.deepEqual(rows, [{ status: 'unpaid', amount: 432 }, { status: 'paid', amount: 777 }, { status: 'exempt', amount: 888 }, { status: 'unpaid', amount: 1234 }]);
+  }
+});
+
+test('未払いがない場合も管理者・一般会員とも確認画面から次へ進める', async () => {
+  for (const role of ['admin', 'user']) {
+    const team = await createTeam(db);
+    const view = await paymentPage({ id: team.adminId, group_id: team.groupId, role })();
+    assert.ok(textContent(view).includes('未払い・未清算項目はありません'));
+    assert.ok(hrefs(view).includes(role === 'admin' ? '/admin' : '/user/calendar'));
+  }
+});
+
+test('管理者の一覧から本人の支払い確認を開き直せる', async () => {
+  const page = loadTs('src/app/admin/page.tsx', {
+    '@/lib/auth': { requireAdmin: async () => ({ name: '管理者' }) },
+    '@/components/LogoutButton': () => null,
+    'next/link': () => null,
+  }).default;
+  const view = await page();
+  assert.ok(hrefs(view).includes('/user/payment-check'));
+  assert.ok(hrefs(view).includes('/admin/coach-work'));
+  assert.ok(textContent(view).includes('支払い確認'));
+});
+
+test('未ログインで支払い確認を開いても請求を読み取らずログインへ戻す', async () => {
+  const page = loadTs('src/app/user/payment-check/page.tsx', {
+    '@/lib/auth': { requireUser: async () => { throw Error('redirect:/login'); } },
+    '@/lib/supabase': { supabase: { from() { assert.fail('認証前に請求を読んではいけない'); } } },
+    '@/components/LogoutButton': () => null,
+    'next/link': () => null,
+  }).default;
+  await assert.rejects(page(), /^Error: redirect:\/login$/);
 });
 
 test('予定の出欠取得に失敗しても、戻る先は今月ではなく予定の月を維持する', async () => {

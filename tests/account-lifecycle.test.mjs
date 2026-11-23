@@ -36,7 +36,8 @@ function actions(actor,{failMail=false}={}) {
   '@/lib/accountPolicy':policy,'@/lib/session':session,'@/lib/authRateLimit':{allowAuthAttempt:async()=>true},
   '@/lib/accountEmail':{applicationUrl:()=> 'http://localhost:3010',sendAccountEmail:async mail=>{if(failMail)throw Error('SMTP unavailable');mails.push(mail);return 'sent';}}};
  const links=loadTs('src/lib/accountLinks.ts',mocks);mocks['@/lib/accountLinks']=links;
- return{mails,mocks,...links,...loadTs('src/app/register/actions.ts',mocks),...loadTs('src/app/admin/members/actions.ts',mocks),...loadTs('src/app/account/actions.ts',mocks),...loadTs('src/app/account/confirm/actions.ts',mocks),...loadTs('src/app/login/forgot-password/actions.ts',mocks)};
+ const memberActions=loadTs('src/app/admin/members/actions.ts',mocks);
+ return{mails,mocks,...links,...loadTs('src/app/register/actions.ts',mocks),...memberActions,performMemberAction:memberActions.performMemberAction.bind(null,actor?.id||''),...loadTs('src/app/account/actions.ts',mocks),...loadTs('src/app/account/confirm/actions.ts',mocks),...loadTs('src/app/login/forgot-password/actions.ts',mocks)};
 }
 test('移行で既存の4桁・先頭0・会員ID・業務列を維持し、平文を除去する',async()=>{
  const m=(await db.query('select * from profiles where id=$1',[legacy.id])).rows[0];
@@ -79,6 +80,13 @@ test('メール送信失敗でも申請・初期設定待ちを保持し、失�
  assert.equal((await db.query('select delivery_status from app_account_notifications where profile_id=$1',[m.id])).rows[0].delivery_status,'failed');
  const retried=actions(admin);assert.equal((await retried.sendMemberMail(initial,form({member_id:m.id,intent:'retry_email'}))).ok,true);assert.equal(retried.mails.length,1);
 });
+test('未払いメールの履歴が新しくても、会員管理の再送は元の確認メールを再発行する',async()=>{
+ const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],m=await member(t),a=actions(admin);
+ await db.query("insert into app_account_notifications(profile_id,kind,recipient,delivery_status,created_at) values($1,'verify_email',$2,'failed',now()-interval '1 minute'),($1,'billing_reminder',$2,'sent',now())",[m.id,m.email]);
+ const result=await a.sendMemberMail(initial,form({member_id:m.id,intent:'retry_email'}));
+ assert.equal(result.ok,true);assert.equal(a.mails.length,1);assert.match(a.mails[0].subject,/メールアドレスの確認/);
+ assert.equal((await db.query("select purpose from app_account_tokens where profile_id=$1 order by created_at desc limit 1",[m.id])).rows[0].purpose,'verify_email');
+});
 test('会員一覧の承認・再送・削除は一覧全体へ操作結果を返す',async()=>{
  const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],m=await member(t,{login_code:null,login_enabled:false}),a=actions(admin);
  const approved=await a.performMemberAction(initial,form({operation:'manage',member_id:m.id,intent:'approve'}));
@@ -110,6 +118,17 @@ test('会員一覧の共通送信先も未ログイン・一般会員の操作�
  await assert.rejects(actions(null).performMemberAction(initial,input),/^Error: redirect:\/login$/);
  await assert.rejects(actions(m).performMemberAction(initial,input),/^Error: redirect:\/user$/);
  assert.equal((await db.query('select account_status from profiles where id=$1',[m.id])).rows[0].account_status,'active');
+});
+test('別タブで管理者が切り替わった古い会員管理画面からは操作せず、両者のログインを維持する',async()=>{
+ const t=await createTeam(db),original=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],current=await member(t,{role:'admin'}),target=await member(t);
+ await db.query("update profiles set login_code='1234' where id=$1",[original.id]);
+ const oldSession=await signIn(original),currentSession=await signIn(current),a=actions(current);
+ const raw=loadTs('src/app/admin/members/actions.ts',a.mocks);
+ const result=await raw.performMemberAction(original.id,initial,form({operation:'manage',member_id:target.id,intent:'delete',confirm_name:target.name}));
+ assert.equal(result.ok,false);assert.match(result.message,/アカウントが変わりました/);
+ assert.equal((await db.query('select account_status from profiles where id=$1',[target.id])).rows[0].account_status,'active');
+ for(const signed of [oldSession,currentSession])assert.equal((await db.query('select * from get_app_session_profile($1)',[signed.hash])).rows.length,1);
+ assert.equal(a.mails.length,0);
 });
 test('確認成功時は用途に合った完了ページへ転送し、同じリンクの再使用は拒否する',async()=>{
  const t=await createTeam(db),m=await member(t),a=actions(m);
@@ -210,6 +229,23 @@ test('履歴のない誤登録は完全削除し、同じ名前で申請し直�
  const result=(await db.query("select * from manage_app_member($1,$2,'delete')",[t.adminId,m.id])).rows[0];
  assert.equal(result.outcome_mode,'permanent');assert.equal((await db.query('select * from profiles where id=$1',[m.id])).rows.length,0);
  await member(t,{name:m.name});
+});
+test('削除は対象者の全セッションと再ログインだけを失効させ、操作した管理者と履歴を維持する',async()=>{
+ for(const history of [false,true]){
+  const t=await createTeam(db),admin=(await db.query("update profiles set login_code='1234' where id=$1 returning *",[t.adminId])).rows[0],m=await member(t,{role:history?'admin':'user'});
+  if(history)await db.query("insert into billing_items(group_id,user_id,target_month,category,title,amount,status)values($1,$2,'2026-11','trip','削除検証',100,'unpaid')",[t.groupId,m.id]);
+  const actorSession=await signIn(admin),first=await signIn(m),second=await signIn(m),a=actions(admin);
+  const result=await a.performMemberAction(initial,form({operation:'manage',member_id:m.id,intent:'delete',confirm_name:m.name}));
+  assert.equal(result.ok,true);
+  for(const signed of [first,second])assert.equal((await db.query('select * from get_app_session_profile($1)',[signed.hash])).rows.length,0);
+  assert.equal((await signIn(m)).outcome,'failed');
+  assert.equal((await db.query('select * from get_app_session_profile($1)',[actorSession.hash])).rows[0].id,admin.id);
+  const saved=(await db.query('select account_status,login_enabled,login_code_hash from profiles where id=$1',[m.id])).rows;
+  if(history){
+   assert.deepEqual(saved,[{account_status:'deleted',login_enabled:false,login_code_hash:null}]);
+   assert.deepEqual((await db.query('select amount,status from billing_items where user_id=$1',[m.id])).rows,[{amount:100,status:'unpaid'}]);
+  }else assert.equal(saved.length,0);
+ }
 });
 test('削除前の会員名確認を必須にし、無関係な会員・データを変更しない',async()=>{
  const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],m=await member(t),a=actions(admin);

@@ -55,8 +55,9 @@ export async function manageMember(_previous: AccountState, form: FormData): Pro
 }
 
 // 一覧全体で結果を保持し、承認によるカード移動や完全削除でも案内を消さない。
-export async function performMemberAction(_previous: MemberListState, form: FormData): Promise<MemberListState> {
-  await requireAdmin();
+export async function performMemberAction(expectedAdminId: string, _previous: MemberListState, form: FormData): Promise<MemberListState> {
+  const admin = await requireAdmin();
+  if (admin.id !== expectedAdminId) return { ok: false, message: "ログイン中のアカウントが変わりました。画面を再読み込みしてください。" };
   const operation = String(form.get("operation") || "");
   const memberId = String(form.get("member_id") || "");
   const initial = { ok: false, message: "" };
@@ -74,7 +75,7 @@ export async function sendMemberMail(_previous: AccountState, form: FormData): P
     if (!["registration", "retry_email", "manual_reset", "reset_email"].includes(intent)) return { ok: false, message: "メール操作が不正です。" };
     if (intent === "registration") return await notifyRegistration(member.id, member.name, member.email);
     if (intent === "retry_email") {
-      const { data: previous } = await supabase.from("app_account_notifications").select("kind,recipient").eq("profile_id", member.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: previous } = await supabase.from("app_account_notifications").select("kind,recipient").eq("profile_id", member.id).neq("kind", "billing_reminder").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (previous?.kind === "registration") return await notifyRegistration(member.id, member.name, member.email);
       if (previous?.kind === "approved") return await approvalNotice(member);
       if (previous && ["email_change", "verify_email"].includes(previous.kind)) return await sendAccountLink(member.id, previous.kind, previous.recipient, admin.id);

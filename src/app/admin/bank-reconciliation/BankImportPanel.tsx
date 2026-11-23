@@ -32,7 +32,7 @@ export default function BankImportPanel({ importHistory }: Props) {
             最近の取込履歴
           </summary>
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="ui-responsive-table min-w-full text-left text-sm">
               <thead className="bg-gray-100 text-gray-700">
                 <tr>
                   <th className="whitespace-nowrap px-3 py-2">取込日時</th>
@@ -44,18 +44,18 @@ export default function BankImportPanel({ importHistory }: Props) {
               <tbody>
                 {importHistory.map((item) => (
                   <tr key={item.id} className="border-t border-gray-200">
-                    <td className="whitespace-nowrap px-3 py-2">
+                    <td data-label="取込日時" className="whitespace-nowrap px-3 py-2">
                       {formatDateTime(item.createdAt)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">
+                    <td data-label="対象期間" className="whitespace-nowrap px-3 py-2">
                       {item.periodStart && item.periodEnd
                         ? `${formatDate(item.periodStart)}〜${formatDate(item.periodEnd)}`
                         : "不明"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">
+                    <td data-label="銀行・支店" className="whitespace-nowrap px-3 py-2">
                       {item.bankName} {item.branchName}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-bold">
+                    <td data-label="結果" className="whitespace-nowrap px-3 py-2 font-bold">
                       新規{item.importedCount}件・重複{item.skippedCount}件
                       {item.conflictCount > 0 && <span className="ml-2 text-amber-800">内容相違{item.conflictCount}件（要確認）</span>}
                     </td>
