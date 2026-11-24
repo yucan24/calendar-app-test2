@@ -43,8 +43,8 @@ before(async () => {
 });
 after(async () => { await source?.close(); if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test("全16保存テーブル・現行20migrationを暗号化し、時差・小数秒・会計・ログインを保持して復元する", async () => {
-  assert.equal(archive.migrations.length, 20);
+test("全16保存テーブル・現行21migrationを暗号化し、時差・小数秒・会計・ログインを保持して復元する", async () => {
+  assert.equal(archive.migrations.length, 21);
   assert.deepEqual(archive.tables.map((t) => t.name), backupTableOrder);
   assert.ok(archive.tables.every((t) => t.rows.length > 0));
   const key = randomBytes(32);

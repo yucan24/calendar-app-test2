@@ -31,7 +31,7 @@ Run `npm run dev`, or `npm run dev -- --hostname 127.0.0.1 --port 3010` if port 
 
 ## Migrations and test data
 
-Both projects have 20 migrations through `20261121010000_prevent_duplicate_tuition.sql`, each recorded with its original SQL in `supabase_migrations.schema_migrations`. There are still 19 public tables; migration 20 adds an index and a function. Do not rerun initialization or seed during startup.
+Both projects have 21 migrations through `20261124010000_preserve_setup_links_on_role_change.sql`, each recorded with its original SQL in `supabase_migrations.schema_migrations`. There are still 19 public tables; migration 21 only updates the profile-change trigger function to retain initial-setup links on role-only changes. Do not rerun initialization or seed during startup.
 
 The test project was initially created with synthetic seed data. On 2026-11-20 the user requested a reset and replacement with the August–October sheets of the supplied workbook. The initial imported fixture had one team, 15 profiles (12 coaches plus test/admin/aggregate accounts), 21 events, 202 work/memo/reimbursement records, three paid aggregate tuition items of 140,000 yen each, four pay-adjustment periods, and nine expense items. Subsequent account tests added records; validation compares against the actual starting data rather than resetting to this initial count. July work and accounting records are excluded. The 7/28 start dates belong only to the requested pay-adjustment rules.
 
@@ -127,6 +127,10 @@ For later releases, test first, prepare reviewed source without environment file
 The temporary deployment-protection bypass credential created by CLI verification was revoked after use. The application’s own session login remains required for all protected pages.
 
 ## Validation
+
+Initial setup after role changes (2026-11-24): reproduced expiry of the emailed setup link after approval followed by a role change. Migration 21 retains only unused `setup`/`manual_setup` links when the account remains `invited`, the code is unset, and only the role changes. All other identity/state changes still expire links; role changes still revoke sessions and non-setup recovery links. Original expiry and single use remain unchanged. Already expired links are not revived: resend the initial setup email.
+
+All 173 tests and ESLint passed, including five new lifecycle cases and backup/restore of all 21 migrations. Exact guarded test/production migration transactions passed local rehearsal. The hosted test DB passed both operation orders, setup and admin login with the new role; its synthetic fixture was rolled back and no email was sent. Both real migrations checked all 19 tables before/after inside the same transaction and preserved every row/column. Both DBs are at `20261124010000`, with the expected function body and restricted public execution. Application source (112 manifest entries) remains identical to the current deployed release; no Vercel deployment, SMTP/environment change, real account mutation or member email was needed. See section 43 of `テスト.md`.
 
 Calendar deletion (2026-11-23): all 168 tests, ESLint, local Webpack/TypeScript and Vercel build passed. Six added cases cover visible deletion for normal/period events without expanding edit controls, cancel, successful deletion/refresh, repeated submit, error retention, attendance cascade and team/auth guards. The public alias points to `dpl_DJu4oWwQpaC4RVAVPr9qiVvAuKdV`; 15 public/access-guard routes and eight served login script assets passed. All 112 release manifest hashes match the committed source. No production data writes, real emails, DB migrations or environment changes were performed. Authenticated production deletion was not exercised by the agent. See section 42 of `テスト.md`.
 

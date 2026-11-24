@@ -72,6 +72,67 @@ test('新規申請→管理者への自動通知→承認→初期設定メー�
   assert.ok(updated.email_verified_at);assert.equal(updated.account_status,'active');
  }finally{if(old===undefined)delete process.env.APP_GROUP_ID;else process.env.APP_GROUP_ID=old;}
 });
+test('権限変更と承認の順番にかかわらず、承認メールから初期設定して新しい権限でログインできる',async()=>{
+ for(const roleFirst of [true,false]){
+  const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],m=await member(t,{login_code:null,login_enabled:false}),a=actions(admin);
+  const approve=()=>a.manageMember(initial,form({member_id:m.id,intent:'approve'}));
+  const changeRole=()=>a.manageMember(initial,form({member_id:m.id,intent:'role_admin'}));
+  if(roleFirst){assert.equal((await changeRole()).ok,true);assert.equal((await approve()).ok,true);}
+  else{assert.equal((await approve()).ok,true);assert.equal((await changeRole()).ok,true);}
+  assert.equal(a.mails.length,1);
+  const raw=/token=([a-f0-9]{64})/.exec(a.mails[0].text)[1];
+  assert.equal((await db.query('select * from inspect_app_account_token($1)',[hash(raw)])).rows[0]?.purpose,'setup');
+  await assert.rejects(a.confirmAccountLink(initial,form({token:raw,new_code:'0017',confirmation:'0017'})),/^Error: redirect:\/account\/complete\?kind=setup$/);
+  const signed=await signIn(m,'0017');assert.equal(signed.outcome,'authenticated');assert.equal(signed.profile_role,'admin');
+ }
+});
+test('初期設定前の昇格・降格でも元のリンクと30分の有効期限を維持し、手動設定も利用できる',async()=>{
+ for(const purpose of ['setup','manual_setup']){
+  const t=await createTeam(db),m=await member(t,{login_code:null,login_enabled:false});
+  await db.query("select * from manage_app_member($1,$2,'approve')",[t.adminId,m.id]);
+  const token=await issue(m,purpose,t.adminId);
+  const before=(await db.query('select expires_at from app_account_tokens where token_hash=$1',[token.hash])).rows[0].expires_at;
+  for(const role of ['role_admin','role_user']){
+   await db.query('select * from manage_app_member($1,$2,$3)',[t.adminId,m.id,role]);
+   assert.equal((await db.query('select * from inspect_app_account_token($1)',[token.hash])).rows[0]?.purpose,purpose);
+   assert.deepEqual((await db.query('select expires_at from app_account_tokens where token_hash=$1',[token.hash])).rows[0].expires_at,before);
+  }
+  await db.query("select consume_app_account_token($1,'0017')",[token.hash]);
+  assert.equal((await signIn(m,'0017')).profile_role,'user');
+  await assert.rejects(db.query("select consume_app_account_token($1,'0017')",[token.hash]));
+ }
+});
+test('権限変更で期限切れ・再発行前の初期設定リンクを復活させない',async()=>{
+ const t=await createTeam(db),m=await member(t,{login_code:null,login_enabled:false});
+ await db.query("select * from manage_app_member($1,$2,'approve')",[t.adminId,m.id]);
+ const old=await issue(m,'setup',t.adminId),current=await issue(m,'setup',t.adminId);
+ await db.query("update app_account_tokens set expires_at=now()-interval '1 minute' where token_hash=$1",[current.hash]);
+ await db.query("select * from manage_app_member($1,$2,'role_admin')",[t.adminId,m.id]);
+ for(const token of [old,current]){
+  assert.equal((await db.query('select * from inspect_app_account_token($1)',[token.hash])).rows.length,0);
+  await assert.rejects(db.query("select consume_app_account_token($1,'0017')",[token.hash]));
+ }
+});
+test('権限以外の名前・メール・コード・状態変更では初期設定リンクを引き続き失効する',async()=>{
+ for(const patch of ["name=name||'-changed',role='admin'","email='changed@example.test',role='admin'","login_code='0017',role='admin'","account_status='suspended',role='admin'"]){
+  const t=await createTeam(db),m=await member(t,{login_code:null,login_enabled:false});
+  await db.query("select * from manage_app_member($1,$2,'approve')",[t.adminId,m.id]);
+  const token=await issue(m,'setup',t.adminId);
+  await db.query('update profiles set '+patch+' where id=$1',[m.id]);
+  assert.equal((await db.query('select * from inspect_app_account_token($1)',[token.hash])).rows.length,0);
+  await assert.rejects(db.query("select consume_app_account_token($1,'0017')",[token.hash]));
+ }
+});
+test('利用開始後の権限変更は対象セッションと再設定リンクを失効し、操作した管理者を維持する',async()=>{
+ const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0],m=await member(t,{email_verified_at:new Date().toISOString()});
+ await db.query("update profiles set login_code='1234' where id=$1",[admin.id]);
+ const actor=await signIn(admin),target=await signIn(m),token=await issue(m,'reset',null);
+ await db.query("select * from manage_app_member($1,$2,'role_admin')",[admin.id,m.id]);
+ assert.equal((await db.query('select * from get_app_session_profile($1)',[target.hash])).rows.length,0);
+ assert.equal((await db.query('select * from get_app_session_profile($1)',[actor.hash])).rows[0]?.id,admin.id);
+ await assert.rejects(db.query("select consume_app_account_token($1,'0017')",[token.hash]));
+ assert.equal((await signIn(m)).profile_role,'admin');
+});
 test('メール送信失敗でも申請・初期設定待ちを保持し、失敗表示と再送で復旧する',async()=>{
  const t=await createTeam(db),admin=(await db.query('select * from profiles where id=$1',[t.adminId])).rows[0];
  const m=await member(t,{login_code:null,login_enabled:false});
