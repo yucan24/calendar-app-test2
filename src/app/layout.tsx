@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import SessionSync from "@/components/SessionSync";
+import PullToRefresh from "@/components/PullToRefresh";
 import { sessionVersionCookieName } from "@/lib/session";
 import "./globals.css";
 
@@ -22,7 +23,7 @@ export default async function RootLayout({
       lang="ja"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col"><SessionSync cookieName={cookieName} version={version} />{children}</body>
+      <body className="min-h-full flex flex-col"><SessionSync cookieName={cookieName} version={version} /><PullToRefresh>{children}</PullToRefresh></body>
     </html>
   );
 }

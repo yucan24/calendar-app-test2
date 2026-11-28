@@ -225,6 +225,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
 
             <div className="mt-4">
               <AdminAttendanceSelect
+                key={`${event.id}:${currentAdmin.id}`}
                 eventId={event.id}
                 userId={currentAdmin.id}
                 defaultStatus={currentAdminResponse?.status ?? ""}
@@ -292,7 +293,7 @@ export default async function AdminCalendarDetailPage({ params }: PageProps) {
         <section className="ui-card mt-8">
           <h2 className="ui-section-title">予定を編集</h2>
 
-          <form action={updateEvent} className="mt-4 space-y-4">
+          <form key={`edit:${event.id}`} action={updateEvent} className="mt-4 space-y-4">
             <input type="hidden" name="id" value={event.id} />
 
             <div>

@@ -1,22 +1,23 @@
 "use client";
 
-import MonthNavigation from "@/components/ui/MonthNavigation";
+import CalendarPeriodBands from "@/components/ui/CalendarPeriodBands";
+import CalendarToolbar from "@/components/ui/CalendarToolbar";
+import CalendarDayTimeline from "@/components/ui/CalendarDayTimeline";
+import { isPullRefreshGestureActive } from "@/lib/pull-to-refresh";
+import CalendarEventPreview, { CalendarAttendanceLegend, OwnAttendance } from "@/components/ui/CalendarEventPreview";
+import { groupCalendarPeriods, calendarHref, compareCalendarEvents, getCalendarDays, summarizeAttendance, type CalendarView } from "@/lib/calendar";
 
+import Link from "next/link";
 
 import PageHeader from "@/components/ui/PageHeader";
 
-
 import LogoutButton from "@/components/LogoutButton";
 
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-} from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SubmitButton from "@/components/SubmitButton";
 import { updateUserCalendarAttendance } from "./actions";
-import { formatTargetMonth } from "@/lib/month";
 
 type CurrentUser = {
   id: string;
@@ -54,19 +55,12 @@ type EventResponse = {
   note: string | null;
 };
 
-type CalendarCell = {
-  dateKey: string;
-  day: number;
-  isCurrentMonth: boolean;
-};
-
 type Props = {
   currentUser?: CurrentUser;
   currentProfile?: CurrentUser;
   targetMonth: string;
-  currentMonth: string;
-  prevMonth: string;
-  nextMonth: string;
+  view?: CalendarView;
+  anchorDate?: string;
   todayKey: string;
   events: CalendarEvent[];
   responses: EventResponse[];
@@ -81,70 +75,6 @@ const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
-}
-
-function makeDateKey(year: number, month: number, day: number) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(
-    2,
-    "0"
-  )}`;
-}
-
-function createCalendarCells(targetMonth: string): CalendarCell[] {
-  const [year, month] = targetMonth.split("-").map(Number);
-
-  const firstDate = new Date(year, month - 1, 1);
-  const lastDate = new Date(year, month, 0);
-  const firstWeekIndex = (firstDate.getDay() + 6) % 7;
-  const daysInMonth = lastDate.getDate();
-
-  const cells: CalendarCell[] = [];
-
-  const prevLastDate = new Date(year, month - 1, 0);
-  const prevDaysInMonth = prevLastDate.getDate();
-
-  for (let i = firstWeekIndex - 1; i >= 0; i--) {
-    const day = prevDaysInMonth - i;
-    const prevMonthDate = new Date(year, month - 2, day);
-
-    cells.push({
-      dateKey: makeDateKey(
-        prevMonthDate.getFullYear(),
-        prevMonthDate.getMonth() + 1,
-        prevMonthDate.getDate()
-      ),
-      day,
-      isCurrentMonth: false,
-    });
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    cells.push({
-      dateKey: makeDateKey(year, month, day),
-      day,
-      isCurrentMonth: true,
-    });
-  }
-
-  let nextDay = 1;
-
-  while (cells.length % 7 !== 0) {
-    const nextMonthDate = new Date(year, month, nextDay);
-
-    cells.push({
-      dateKey: makeDateKey(
-        nextMonthDate.getFullYear(),
-        nextMonthDate.getMonth() + 1,
-        nextMonthDate.getDate()
-      ),
-      day: nextDay,
-      isCurrentMonth: false,
-    });
-
-    nextDay++;
-  }
-
-  return cells;
 }
 
 function getDateKeyFromIso(value: string) {
@@ -167,94 +97,6 @@ function formatDate(value: string) {
     dateStyle: "full",
     timeZone: "Asia/Tokyo",
   }).format(new Date(`${value}T00:00:00+09:00`));
-}
-
-function visualLength(value: string | null | undefined) {
-  const text = String(value ?? "").replace(/\s+/g, "");
-  let count = 0;
-
-  for (const char of Array.from(text)) {
-    count += /^[\x20-\x7E]$/.test(char) ? 0.5 : 1;
-  }
-
-  return count;
-}
-
-function displayText(value: string | null | undefined) {
-  return String(value ?? "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("\n");
-}
-
-function isTimeLikeText(value: string | null | undefined) {
-  const text = String(value ?? "").trim();
-
-  return /^\d{1,2}[:：]\d{2}\s*[-ー－〜~]\s*\d{1,2}[:：]\d{2}$/.test(
-    text
-  );
-}
-
-function calendarTextStyle(
-  value: string | null | undefined,
-  color: string | null | undefined
-): CSSProperties {
-  const text = displayText(value);
-  const length = visualLength(text);
-  const hasLineBreak = text.includes("\n");
-  const isTimeText = isTimeLikeText(text);
-
-  if (isTimeText) {
-    return {
-      color: color || "#111827",
-      display: "block",
-      width: "100%",
-      textAlign: "center",
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "clip",
-      fontSize: "8.5px",
-      lineHeight: "1.08",
-      letterSpacing: "-0.03em",
-      transform: "none",
-      fontVariantNumeric: "tabular-nums",
-    };
-  }
-
-  if (!hasLineBreak && length <= 5) {
-    const fontSize = length <= 4 ? "10.2px" : "8.6px";
-    const letterSpacing = length >= 5 ? "-0.14em" : "-0.04em";
-
-    return {
-      color: color || "#111827",
-      display: "block",
-      width: "100%",
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "clip",
-      fontSize,
-      lineHeight: "1.08",
-      letterSpacing,
-      transform: "none",
-      transformOrigin: "center",
-    };
-  }
-
-  return {
-    color: color || "#111827",
-    display: "-webkit-box",
-    overflow: "hidden",
-    whiteSpace: "pre-line",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    fontSize: length >= 12 ? "8px" : length >= 8 ? "8.5px" : "9px",
-    lineHeight: "1.1",
-    letterSpacing: length >= 10 ? "-0.06em" : "-0.03em",
-  };
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -298,10 +140,9 @@ export default function UserCalendarClient({
   currentUser: currentUserProp,
   currentProfile,
   targetMonth,
-  currentMonth,
-  prevMonth,
-  nextMonth,
+  view = "month",
   todayKey,
+  anchorDate = todayKey.startsWith(targetMonth) ? todayKey : `${targetMonth}-01`,
   events,
   responses,
   profiles,
@@ -323,6 +164,7 @@ export default function UserCalendarClient({
   const [isPending, startTransition] = useTransition();
 
   const actionLockRef = useRef(false);
+  const pointerDownEventRef = useRef<string | null>(null);
   const pointerDownDateRef = useRef<string | null>(null);
   const isDraggingSelectionRef = useRef(false);
   const movedTooMuchRef = useRef(false);
@@ -344,7 +186,11 @@ export default function UserCalendarClient({
     return map;
   }, [profileList]);
 
-  const cells = useMemo(() => createCalendarCells(targetMonth), [targetMonth]);
+  const cells = useMemo(() => getCalendarDays(targetMonth, view, anchorDate), [targetMonth, view, anchorDate]);
+
+  const calendarWeeks = useMemo(() => Array.from({ length: Math.ceil(cells.length / 7) }, (_, index) => cells.slice(index * 7, index * 7 + 7)), [cells]);
+  const periodGroups = useMemo(() => groupCalendarPeriods(events), [events]);
+  const periodEventIds = useMemo(() => new Set(periodGroups.flatMap(group => group.events.map(event => event.id))), [periodGroups]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -356,6 +202,7 @@ export default function UserCalendarClient({
       map.set(dateKey, list);
     }
 
+    for (const list of map.values()) list.sort(compareCalendarEvents);
     return map;
   }, [events]);
 
@@ -403,7 +250,7 @@ export default function UserCalendarClient({
 
   if (!currentUser) {
     return (
-      <main className="ui-page">
+      <main className="ui-page ui-calendar-page">
         <p className="rounded bg-white p-4 font-bold text-red-700 shadow">
           ログイン情報が見つかりません。
         </p>
@@ -412,38 +259,7 @@ export default function UserCalendarClient({
   }
 
   function getEventSummary(eventId: string) {
-    const eventResponses = responsesByEvent.get(eventId) ?? [];
-
-    let coachCount = 0;
-    let playerCount = 0;
-    let attend = 0;
-    let pending = 0;
-    let absent = 0;
-
-    for (const response of eventResponses) {
-      if (response.status === "attend") {
-        attend += 1;
-
-        const profile = profileById.get(response.user_id);
-
-        if (profile?.role === "admin") {
-          coachCount += 1;
-        } else {
-          playerCount += 1;
-        }
-      }
-
-      if (response.status === "pending") pending += 1;
-      if (response.status === "absent") absent += 1;
-    }
-
-    return {
-      coachCount,
-      playerCount,
-      attend,
-      pending,
-      absent,
-    };
+    return summarizeAttendance(responsesByEvent.get(eventId) ?? [], profileById);
   }
 
   function getParticipants(eventId: string, role: "admin" | "user") {
@@ -470,6 +286,13 @@ export default function UserCalendarClient({
     setSelectedDateKey(null);
     setSelectedEventId(null);
     setErrorMessage("");
+  }
+
+  function selectEvent(eventId: string | null, dateKey = selectedDateKey) {
+    if (actionLockRef.current) return;
+    setErrorMessage("");
+    setSelectedDateKey(dateKey);
+    setSelectedEventId(eventId);
   }
 
   function closeBulkModal() {
@@ -544,6 +367,7 @@ export default function UserCalendarClient({
       event.currentTarget.setPointerCapture(event.pointerId);
     }
 
+    pointerDownEventRef.current = (event.target as HTMLElement | undefined)?.closest?.<HTMLElement>("[data-event-id]")?.dataset.eventId ?? null;
     pointerDownDateRef.current = dateKey;
     isDraggingSelectionRef.current = false;
     movedTooMuchRef.current = false;
@@ -596,6 +420,7 @@ export default function UserCalendarClient({
   }
 
   function handleCalendarPointerUp() {
+    if (isPullRefreshGestureActive()) { resetPointerState(); return; }
     const dateKey = pointerDownDateRef.current;
     const isDraggingSelection = isDraggingSelectionRef.current;
     const movedTooMuch = movedTooMuchRef.current;
@@ -610,8 +435,7 @@ export default function UserCalendarClient({
       const firstNormalEvent =
         dayEvents.find((event) => event.display_type !== "period") ?? null;
 
-      setSelectedDateKey(dateKey);
-      setSelectedEventId(firstNormalEvent?.id ?? null);
+      selectEvent(pointerDownEventRef.current ?? firstNormalEvent?.id ?? null, dateKey);
     }
 
     pointerDownDateRef.current = null;
@@ -695,58 +519,13 @@ export default function UserCalendarClient({
     });
   }
 
-function renderEventBlock(event: CalendarEvent) {
-  const summary = getEventSummary(event.id);
-  const myResponse = myResponsesByEvent.get(event.id);
-
-  return (
-    <div key={event.id} className="text-center">
-      <div className="ui-calendar-event-title" style={calendarTextStyle(event.title, event.title_color)}>
-        {displayText(event.title)}
-      </div>
-
-      {event.location && (
-        <div style={calendarTextStyle(event.location, event.location_color)}>
-          {displayText(event.location)}
-        </div>
-      )}
-
-      {event.time_text && (
-        <div style={calendarTextStyle(event.time_text, event.time_color)}>
-          {displayText(event.time_text)}
-        </div>
-      )}
-
-      {event.attendance_required && (
-        <>
-          <div
-            className={`mt-0.5 w-full rounded px-1 py-0.5 text-center text-[10px] font-black leading-tight ${statusClass(
-              myResponse?.status
-            )}`}
-          >
-            <span className="inline-block w-full">
-              {myResponse?.status === "attend"
-                ? "〇"
-                : myResponse?.status === "absent"
-                  ? "×"
-                  : myResponse?.status === "pending"
-                    ? "△"
-                    : "未回答"}
-            </span>
-          </div>
-
-          <div className="mt-0.5 text-[9px] font-bold leading-tight text-gray-800">
-            <div>指導者:{summary.coachCount}人</div>
-            <div>選手:{summary.playerCount}人</div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+  function renderEventBlock(event: CalendarEvent, showOwnStatus: boolean) {
+    return <CalendarEventPreview key={event.id} event={event} summary={getEventSummary(event.id)} ownStatus={myResponsesByEvent.get(event.id)?.status} showOwnStatus={showOwnStatus} />;
+  }
 
   function renderSelectedEventDetail(event: CalendarEvent) {
     const summary = getEventSummary(event.id);
+    const periodGroup = periodGroups.find(group => group.events.some(item => item.id === event.id));
     const myResponse = myResponsesByEvent.get(event.id);
     const coachNames = getParticipants(event.id, "admin");
     const playerNames = getParticipants(event.id, "user");
@@ -754,6 +533,15 @@ function renderEventBlock(event: CalendarEvent) {
     return (
       <section className="ui-card mt-5">
         <h3 className="text-lg font-bold text-gray-900">{event.title}</h3>
+
+        {periodGroup && periodGroup.events.length > 1 && <nav aria-label="期間予定の日付" className="ui-calendar-period-dates">
+          {periodGroup.events.map(item => {
+            const dateKey = getDateKeyFromIso(item.start_at);
+            return <button key={item.id} type="button" className={`ui-button ${item.id === event.id ? "ui-button-primary" : "ui-button-secondary"}`} aria-pressed={item.id === event.id} onClick={() => {
+              selectEvent(item.id, dateKey);
+            }}>{Number(dateKey.slice(5, 7))}/{Number(dateKey.slice(8))}</button>;
+          })}
+        </nav>}
 
         {event.location && (
           <p className="mt-1 text-sm font-medium text-gray-700">
@@ -808,7 +596,7 @@ function renderEventBlock(event: CalendarEvent) {
               </div>
             </div>
 
-            <form action={handleAttendance} className="mt-4 space-y-3">
+            <form key={`attendance:${event.id}`} action={handleAttendance} className="mt-4 space-y-3">
               <input type="hidden" name="event_id" value={event.id} />
 
               <div>
@@ -895,9 +683,7 @@ function renderEventBlock(event: CalendarEvent) {
             <h2 className="ui-section-title text-gray-900">
               {formatDate(selectedDateKey)}
             </h2>
-            <p className="mt-1 text-sm font-medium text-gray-700">
-              予定の確認と出欠回答を行います。
-            </p>
+            <Link href={calendarHref("/user/calendar", "day", selectedDateKey)} onClick={closeSingleModal} className="ui-button ui-button-secondary mt-2">日表示で開く</Link>
           </div>
 
           <button
@@ -931,7 +717,7 @@ function renderEventBlock(event: CalendarEvent) {
                   <button
                     key={event.id}
                     type="button"
-                    onClick={() => setSelectedEventId(event.id)}
+                    onClick={() => selectEvent(event.id)}
                     className={
                       selectedEventId === event.id
                         ? "w-full rounded border-2 border-black bg-gray-50 p-3 text-left"
@@ -965,7 +751,7 @@ function renderEventBlock(event: CalendarEvent) {
                 <button
                   key={event.id}
                   type="button"
-                  onClick={() => setSelectedEventId(event.id)}
+                  onClick={() => selectEvent(event.id)}
                   className={
                     selectedEventId === event.id
                       ? "w-full rounded border-2 border-black bg-teal-50 p-3 text-left"
@@ -985,161 +771,123 @@ function renderEventBlock(event: CalendarEvent) {
   }
 
   return (
-    <main className="ui-page">
-      <div className="mx-auto max-w-6xl">
+    <main className="ui-page ui-calendar-page">
+      <div className="ui-calendar-layout">
         <PageHeader title="カレンダー" backHref="/user" actions={<LogoutButton />} />
 
-        <section className="ui-card mt-5">
-          <div className="ui-calendar-controls flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="ui-section-title text-gray-900">
-              {formatTargetMonth(targetMonth)}
-            </h2>
-
-            <MonthNavigation baseHref="/user/calendar" previousMonth={prevMonth} currentMonth={currentMonth} nextMonth={nextMonth} />
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleMultiSelectModeChange}
-              className={
-                isMultiSelectMode
-                  ? "ui-button ui-button-primary"
-                  : "ui-button ui-button-secondary"
-              }
-            >
-              複数選択
+        <section className="ui-card ui-calendar-toolbar-card mt-5">
+          <CalendarToolbar baseHref="/user/calendar" view={view} anchorDate={anchorDate} targetMonth={targetMonth} todayKey={todayKey}
+            selectionActions={selectedDateKeyList.length > 0 ? <>
+              <button type="button" onClick={openBulkModal} className="ui-button ui-button-primary">出欠回答</button>
+              <button type="button" onClick={clearSelectedDates} className="ui-button ui-button-secondary">選択解除</button>
+              <span className="ui-calendar-selection-count">{selectedDateKeyList.length}日選択</span>
+            </> : null}
+          >
+            <button type="button" onClick={handleMultiSelectModeChange} aria-pressed={isMultiSelectMode}
+              className={`ui-button ${isMultiSelectMode ? "ui-button-primary" : "ui-button-secondary"}`}>
+              {isMultiSelectMode ? "選択終了" : "一括回答"}
             </button>
-
-            {selectedDateKeyList.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={openBulkModal}
-                  className="ui-button bg-yellow-400 text-white"
-                >
-                  まとめて出欠回答
-                </button>
-
-                <button
-                  type="button"
-                  onClick={clearSelectedDates}
-                  className="ui-button ui-button-secondary"
-                >
-                  選択解除
-                </button>
-
-                <span className="text-sm font-bold text-gray-700">
-                  {selectedDateKeyList.length}日選択中
-                </span>
-              </>
-            )}
-          </div>
+          </CalendarToolbar>
         </section>
 
         <section
-          className="ui-calendar mt-5 select-none overflow-hidden rounded-lg bg-gray-300 shadow"
+          className={`ui-calendar ui-schedule-calendar ui-calendar-view-${view} mt-5 select-none`}
+          data-pull-refresh-ignore={isMultiSelectMode || isSelectionActive ? "" : undefined}
           onPointerMove={handleCalendarPointerMove}
           onPointerUp={handleCalendarPointerUp}
           onPointerCancel={handleCalendarPointerCancel}
           style={{ touchAction: isSelectionActive || isMultiSelectMode ? "none" : "pan-y" }}
         >
-          <div className="grid grid-cols-7 gap-px bg-gray-300">
-            {weekLabels.map((label, index) => (
+          <div className="ui-calendar-grid">
+            {view !== "day" && <div className="ui-calendar-weekday-row">{weekLabels.map((label, index) => (
               <div
                 key={label}
-                className={
-                  index === 5
-                    ? "bg-blue-50 py-2 text-center text-sm font-bold text-blue-700"
-                    : index === 6
-                      ? "bg-red-50 py-2 text-center text-sm font-bold text-red-700"
-                      : "bg-white py-2 text-center text-sm font-bold text-gray-900"
-                }
+                className={`ui-calendar-weekday ${index === 5 ? "is-saturday" : index === 6 ? "is-sunday" : ""}`}
               >
                 {label}
               </div>
-            ))}
+            ))}</div>}
 
-            {cells.map((cell, index) => {
-              const dayEvents = eventsByDate.get(cell.dateKey) ?? [];
-              const normalEvents = dayEvents.filter(
-                (event) => event.display_type !== "period"
-              );
-              const periodEvents = dayEvents.filter(
-                (event) => event.display_type === "period"
-              );
+            {calendarWeeks.map(week => <div className="ui-calendar-week" key={week[0].dateKey}>
+              <div className="ui-calendar-week-days">
+                {week.map((cell) => {
+                  const dayEvents = eventsByDate.get(cell.dateKey) ?? [];
+                  const normalEvents = dayEvents.filter(
+                    (event) => !periodEventIds.has(event.id)
+                  );
+                  const periodEvents = dayEvents.filter(
+                    (event) => periodEventIds.has(event.id)
+                  );
 
-              const weekIndex = index % 7;
-              const isSaturday = weekIndex === 5;
-              const isSunday = weekIndex === 6;
-              const isHoliday = dayEvents.some((event) => event.is_holiday);
-              const isToday = cell.dateKey === todayKey;
-              const isSelected = selectedDateKeys.has(cell.dateKey);
+                  const isSaturday = cell.weekday === 6;
+                  const isSunday = cell.weekday === 0;
+                  const isHoliday = dayEvents.some((event) => event.is_holiday);
+                  const isToday = cell.dateKey === todayKey;
+                  const isSelected = selectedDateKeys.has(cell.dateKey);
 
-              const dateColorClass = !cell.isCurrentMonth
-                ? "text-gray-400"
-                : isSunday || isHoliday
-                  ? "text-red-600"
-                  : isSaturday
-                    ? "text-blue-600"
-                    : "text-gray-900";
+                  const attendanceEvents = normalEvents.filter(event => event.attendance_required);
+                  const singleAttendanceEvent = attendanceEvents.length === 1 ? attendanceEvents[0] : null;
 
-              return (
-                <button
-                  key={cell.dateKey}
-                  type="button"
-                  data-date-key={cell.dateKey}
-                  aria-pressed={isSelected}
-                  onPointerDown={(event) =>
-                    handlePointerDown(event, cell.dateKey)
-                  }
-                  className={
-                    cell.isCurrentMonth
-                      ? "flex min-h-32 flex-col bg-white p-1 text-left align-top"
-                      : "flex min-h-32 flex-col bg-gray-100 p-1 text-left align-top text-gray-400"
-                  }
-                  style={
-                    isSelected
-                      ? { boxShadow: "inset 0 0 0 2px #facc15" }
-                      : undefined
-                  }
-                >
-                  <div
-                    className={
-                      isToday
-                        ? `inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-black text-sm font-bold ${dateColorClass}`
-                        : `inline-flex h-7 w-7 items-center justify-center text-sm font-bold ${dateColorClass}`
-                    }
-                  >
-                    {cell.day}
-                  </div>
-
-                  <div className="mt-1 space-y-1">
-                    {normalEvents.slice(0, 2).map((event) =>
-                      renderEventBlock(event)
-                    )}
-
-                    {normalEvents.length > 2 && (
-                      <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-bold text-gray-700">
-                        他 {normalEvents.length - 2}件
+                  return (
+                    <button
+                      key={cell.dateKey}
+                      type="button"
+                      data-date-key={cell.dateKey}
+                      aria-pressed={isSelected}
+                      aria-label={`${cell.dateKey} ${dayEvents.length}件の予定 ${dayEvents.map(event => {
+                        const summary = getEventSummary(event.id);
+                        return `${event.title} ${event.time_text ?? ""}${event.attendance_required ? ` 指導者${summary.coachCount}人、選手${summary.playerCount}人 自分は${statusLabel(myResponsesByEvent.get(event.id)?.status)}` : ""}`;
+                      }).join("、")}`}
+                      disabled={!cell.valid}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        if (isMultiSelectMode) setSelectedDateKeys(current => toggleDateInSet(current, cell.dateKey));
+                        else {
+                          selectEvent(normalEvents[0]?.id ?? periodEvents[0]?.id ?? null, cell.dateKey);
+                        }
+                      }}
+                      onPointerDown={(event) =>
+                        handlePointerDown(event, cell.dateKey)
+                      }
+                      className={`ui-calendar-day ${!cell.isCurrentMonth ? "is-outside-month" : ""} ${isHoliday || isSunday ? "is-sunday" : isSaturday ? "is-saturday" : ""} ${isToday ? "is-today" : ""} ${isSelected ? "is-selected" : ""}`}
+                    >
+                      <div className="ui-calendar-day-header">
+                        <span className="ui-calendar-date-number">
+                          {view === "month" ? cell.day : `${Number(cell.dateKey.slice(5, 7))}/${cell.day}`}
+                          {view !== "month" && <span className="ui-calendar-date-weekday">（{"日月火水木金土"[cell.weekday]}）</span>}
+                        </span>
+                        {view !== "day" && singleAttendanceEvent && <OwnAttendance status={myResponsesByEvent.get(singleAttendanceEvent.id)?.status} />}
+                        {view === "month" && attendanceEvents.length > 1 && <span className="ui-calendar-own-statuses" aria-label="予定順の自分の出欠">
+                          {attendanceEvents.map(event => <span key={event.id} data-event-id={event.id}>
+                            <OwnAttendance status={myResponsesByEvent.get(event.id)?.status} eventTitle={event.title} />
+                          </span>)}
+                        </span>}
                       </div>
-                    )}
-                  </div>
+                      {view !== "day" && <div className="ui-calendar-day-events">
+                        {normalEvents.map(event => renderEventBlock(event, !singleAttendanceEvent))}
+                        {view !== "month" && dayEvents.length === 0 && <span className="ui-calendar-empty">予定なし</span>}
+                      </div>}
 
-                  <div className="mt-auto space-y-1 pt-1">
-                    {periodEvents.slice(0, 1).map((event) => (
-                      <div
-                        key={event.id}
-                        className="rounded bg-teal-100 px-1 py-0.5 text-center text-[10px] font-bold text-teal-800"
-                      >
-                        {displayText(event.title)}
-                      </div>
-                    ))}
-                  </div>
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
+              </div>
+              <CalendarPeriodBands groups={periodGroups} dateKeys={week.map(cell => cell.dateKey)} disabled={isMultiSelectMode} onSelect={(dateKey, eventId) => {
+                selectEvent(eventId, dateKey);
+              }} />
+              {view === "day" && <CalendarDayTimeline
+                events={(eventsByDate.get(anchorDate) ?? []).filter(event => !periodEventIds.has(event.id))}
+                getSummary={getEventSummary} getOwnStatus={eventId => myResponsesByEvent.get(eventId)?.status}
+                onSelect={eventId => {
+                  setErrorMessage("");
+                  if (isMultiSelectMode) setSelectedDateKeys(current => toggleDateInSet(current, anchorDate));
+                  else selectEvent(eventId, anchorDate);
+                }}
+              />}
+            </div>)}
           </div>
+          <CalendarAttendanceLegend />
         </section>
       </div>
 

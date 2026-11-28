@@ -1,24 +1,17 @@
 import { requireAdmin } from "@/lib/auth";
+import { fetchAllRows } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
-import {
-  getCurrentTargetMonth,
-  getTargetMonthUtcRange,
-  getNextTargetMonth,
-  getPrevTargetMonth,
-  isValidTargetMonth,
-} from "@/lib/month";
+import { getJstDateKey } from "@/lib/month";
+import { getCalendarPeriodUtcRange, getCalendarUtcRange, resolveCalendarSelection, type CalendarSearchParams } from "@/lib/calendar";
 import AdminCalendarClient from "./AdminCalendarClient";
 
 type PageProps = {
-  searchParams?: Promise<{
-    month?: string;
-  }>;
+  searchParams?: Promise<CalendarSearchParams>;
 };
 
 type Profile = {
   id: string;
   name: string;
-  email: string | null;
   role: "admin" | "user";
 };
 
@@ -46,38 +39,16 @@ type EventResponse = {
   note: string | null;
 };
 
-function getTodayDateKey() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
-}
-
 export default async function AdminCalendarPage({ searchParams }: PageProps) {
   const admin = await requireAdmin();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
-  const currentTargetMonth = getCurrentTargetMonth();
+  const todayKey = getJstDateKey(new Date().toISOString());
+  const { targetMonth, view, anchorDate } = resolveCalendarSelection(resolvedSearchParams, todayKey);
+  const { startIso: monthStartIso, endIso: monthEndIso } = getCalendarUtcRange(targetMonth, view, anchorDate);
 
-  const targetMonth =
-    resolvedSearchParams?.month && isValidTargetMonth(resolvedSearchParams.month)
-      ? resolvedSearchParams.month
-      : currentTargetMonth;
-
-  const prevMonth = getPrevTargetMonth(targetMonth);
-  const nextMonth = getNextTargetMonth(targetMonth);
-
-  const { startIso: monthStartIso, endIso: monthEndIso } = getTargetMonthUtcRange(targetMonth);
-
-  const { data: events, error: eventsError } = await supabase
+  const periodRange = getCalendarPeriodUtcRange(targetMonth, view, anchorDate);
+  const eventResults = await Promise.all([fetchAllRows<CalendarEvent>((from, to) => supabase
     .from("calendar_events")
     .select(
       "id, title, description, location, start_at, end_at, time_text, is_holiday, title_color, location_color, time_color, attendance_required, display_type"
@@ -86,21 +57,27 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
     .gte("start_at", monthStartIso)
     .lt("start_at", monthEndIso)
     .order("start_at", { ascending: true })
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true }).range(from, to)),
+    fetchAllRows<CalendarEvent>((from, to) => supabase.from("calendar_events")
+      .select("id, title, description, location, start_at, end_at, time_text, is_holiday, title_color, location_color, time_color, attendance_required, display_type")
+      .eq("group_id", admin.group_id).eq("attendance_required", false)
+      .gte("start_at", periodRange.startIso).lt("start_at", periodRange.endIso)
+      .order("start_at", { ascending: true }).order("created_at", { ascending: true }).order("id", { ascending: true }).range(from, to)),
+  ]);
 
-  if (eventsError) {
-    throw new Error(eventsError.message);
-  }
+  for (const result of eventResults) if (result.error) throw new Error(result.error.message);
+  const events = Array.from(new Map(eventResults.flatMap(result => result.data ?? []).map(event => [event.id, event])).values());
 
   const eventIds = (events ?? []).map((event) => event.id);
 
   let responses: EventResponse[] = [];
 
   if (eventIds.length > 0) {
-    const { data: responseData, error: responsesError } = await supabase
+    const { data: responseData, error: responsesError } = await fetchAllRows<EventResponse>((from, to) => supabase
       .from("event_responses")
       .select("id, event_id, user_id, status, note")
-      .in("event_id", eventIds);
+      .in("event_id", eventIds).order("id", { ascending: true }).range(from, to));
 
     if (responsesError) {
       throw new Error(responsesError.message);
@@ -109,12 +86,13 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
     responses = (responseData ?? []) as EventResponse[];
   }
 
-  const { data: profiles, error: profilesError } = await supabase
+  const { data: profiles, error: profilesError } = await fetchAllRows<Profile>((from, to) => supabase
     .from("profiles")
-    .select("id, name, email, role")
+    .select("id, name, role")
     .eq("group_id", admin.group_id)
     .order("role", { ascending: true })
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .order("id", { ascending: true }).range(from, to));
 
   if (profilesError) {
     throw new Error(profilesError.message);
@@ -126,11 +104,11 @@ export default async function AdminCalendarPage({ searchParams }: PageProps) {
         id: admin.id,
         name: admin.name,
       }}
+      key={`${view}:${anchorDate}`}
       targetMonth={targetMonth}
-      currentMonth={currentTargetMonth}
-      prevMonth={prevMonth}
-      nextMonth={nextMonth}
-      todayKey={getTodayDateKey()}
+      view={view}
+      anchorDate={anchorDate}
+      todayKey={todayKey}
       events={(events ?? []) as CalendarEvent[]}
       responses={responses}
       profiles={(profiles ?? []) as Profile[]}

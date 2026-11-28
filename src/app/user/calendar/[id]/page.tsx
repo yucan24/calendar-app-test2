@@ -197,7 +197,7 @@ export default async function UserCalendarDetailPage({ params }: PageProps) {
           <section className="ui-card mt-6">
             <h2 className="ui-section-title">回答する</h2>
 
-            <form action={submitResponse} className="mt-4 space-y-4">
+            <form key={`attendance:${event.id}`} action={submitResponse} className="mt-4 space-y-4">
               <input type="hidden" name="event_id" value={event.id} />
 
               <div>

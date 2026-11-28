@@ -44,6 +44,15 @@ Originals and detailed fixture audits are under ignored `testdata/`; they are ex
 | Admin | `テスト管理者` | `1234` |
 | User | `テストユーザー` | `1111` |
 
+Calendar UI prototype (2026-11-28, branch `feat/calendar-attendance-views`, local/test only): run the dev server on port 3010 and open http://localhost:3010/login . A separate synthetic team has 15 members and calendar preview events around November 26–December 2, 2026, including overlapping periods that cross a week/month boundary. The original test team and its workbook/accounting data are unchanged. This fixture is retained for the user's review; it is not production data or a migration.
+
+| Role | Name | Login code |
+| --- | --- | --- |
+| Coach/admin preview | `UI確認コーチ` | `2468` |
+| Player preview | `UI確認選手` | `1357` |
+
+November 28 has two attendance events with different personal states and totals; the first uses the six-character venue `総合運動公園`. Ten synthetic daily period records were added for the joined-band preview. Existing user-added preview events are preserved; November 29 has zero attendees. The private fixture IDs and setup/HTTP verification script are in ignored `testdata/calendar-ui/`. Do not run a global reset or seed to try this preview. No emails are sent by this fixture setup.
+
 Global CLI 2.108.0 can access metadata but direct database login times out. Isolated official CLI 3.2.0 uses the Management API successfully:
 
 ```bash
